@@ -287,6 +287,28 @@ export class TerminalWaitTimeoutError extends Error {
   }
 }
 
+/**
+ * Subscribe to a session's events. **Nothing arrives without this.**
+ *
+ * CONFIRMED on two separate runs: with no subscription the runtime emits ZERO events — a turn can
+ * start AND complete while the client sees nothing. That is the difference between "the turn
+ * failed" and "we were not listening", and it cost real debugging time.
+ *
+ * `deliveryKind` is REQUIRED; the runtime's validator accepts exactly "desktop-continuous" or
+ * "web-remote-replayable". Live is right for an attached client.
+ *
+ * On the connection-level form: the v4 enum lists `v4/controller/subscribe`, but this agent build
+ * answers `-32601 Method not found` for it — it appears to be a HOST-side method. Per-session
+ * subscribe is the mechanism that exists here, so it is the one used.
+ */
+export async function subscribeSession(
+  client: ZCodeProtocolClient,
+  sessionId: string,
+  deliveryKind: 'desktop-continuous' | 'web-remote-replayable' = 'desktop-continuous',
+): Promise<unknown> {
+  return client.request('session/subscribe', { sessionId, deliveryKind });
+}
+
 /** Subscribe a buffer to a client's notifications. Returns an unsubscribe fn. */
 export function attachEventBuffer(client: ZCodeProtocolClient, buffer: EventBuffer): () => void {
   const onNotification = (method: string, params: unknown) => {

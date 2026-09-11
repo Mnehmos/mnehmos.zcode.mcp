@@ -64,7 +64,12 @@ export const SessionArgs = z.discriminatedUnion('action', [
     mcp_servers: z.array(z.string().min(1)).max(64).optional(),
     title_generation: z.boolean().optional(),
     persistence: z.enum(['immediate', 'deferred']).optional()
-      .describe('Default "immediate". A deferred session has no database row until it is first used.'),
+      .describe('Default "deferred", matching the runtime. A deferred session has no database row until first used.'),
+    first_input: z.string().min(1).max(200_000).optional().describe(
+      'Send a first prompt in the SAME command. Strongly recommended: without it the created ' +
+        'session has no database row until it is first used, so a later separate send fails its ' +
+        'foreign key (addendum A21).',
+    ),
   }),
   z.object({ action: z.literal('resume'), session_id: SessionId, model: z.string().min(1).optional(), thought_level: z.string().min(1).optional() }),
   z.object({ action: z.literal('close'), session_id: SessionId }),
@@ -88,7 +93,11 @@ export const SessionArgs = z.discriminatedUnion('action', [
 export const ChatArgs = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('send'),
-    session_id: SessionId,
+    session_id: SessionId.optional().describe(
+      'Omit to create a session and send the first input in one command — the only ordering the ' +
+        'runtime supports for a brand-new session (see addendum A21). Provide it to send to an ' +
+        'existing session.',
+    ),
     text: z.string().min(1).max(200_000),
     attachments: z.array(Attachment).max(20).optional(),
     delivery: z.enum(['auto', 'startNow', 'queue', 'guide']).optional(),

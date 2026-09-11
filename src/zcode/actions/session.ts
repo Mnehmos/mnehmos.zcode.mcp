@@ -208,6 +208,21 @@ async function doGet(
   return finish(ctx, o, runId);
 }
 
+/**
+ * Create a session.
+ *
+ * Two paths, and the difference is not cosmetic:
+ *
+ *  - with `first_input`, the runtime's own v4 `createSession` command is used. It writes the session
+ *    record AND admits the first input in one ordered operation, so the result is a session that
+ *    exists on disk and can be sent to immediately.
+ *
+ *  - without it, `session/create` is used, which returns an in-memory session whose database row
+ *    appears only when the session is first USED. The row is written by the runtime's
+ *    `ensureSessionPersisted`, called from turn-start paths only (regular turn, compact, rewind).
+ *    That is by design, not a fault — but a caller who assumes a fresh `session/create` session is
+ *    addressable will be surprised, so it is stated rather than left to be discovered.
+ */
 async function doCreate(
   ctx: ServerContext,
   o: Outcome,
@@ -216,6 +231,12 @@ async function doCreate(
   args: Record<string, unknown>,
   runId: string,
 ): Promise<Envelope> {
+  const firstInput = typeof args.first_input === 'string' ? args.first_input : null;
+
+  if (firstInput) {
+    return createWithFirstInput(ctx, o, runtime, workspace, firstInput, args, runId);
+  }
+
   const params: Record<string, unknown> = { workspace: { workspacePath: workspace, workspaceKey: runtime.workspaceKey } };
   if (typeof args.mode === 'string') params.mode = args.mode;
   if (typeof args.model === 'string') params.model = args.model;
@@ -224,20 +245,17 @@ async function doCreate(
   if (typeof args.title_generation === 'boolean') params.titleGenerationEnabled = args.title_generation;
   // This is where an allowlist belongs — it is session-scoped, unlike the per-command denylist.
   if (Array.isArray(args.tool_allowlist)) params.toolAllowlist = args.tool_allowlist;
-  // CONFIRMED by probing the runtime's own validator: this field accepts "immediate" | "deferred".
-  // Omitting it left the session unpersisted, so the FIRST turn failed with a SQLite
-  // "FOREIGN KEY constraint failed" — session_input references session(id), and there was no row.
-  // Defaulting to "immediate" makes the session exist on disk before anything is sent to it.
-  params.persistence = typeof args.persistence === 'string' ? args.persistence : 'immediate';
+  // The runtime's own validator accepts exactly "immediate" | "deferred", and its own v4
+  // createSession hardcodes "deferred". Defaulting to that keeps us on the platform's path; the
+  // warning below is what makes the consequence visible.
+  params.persistence = typeof args.persistence === 'string' ? args.persistence : 'deferred';
 
   const t = Date.now();
-  const created = await runtime.client.request<SessionRecord>('session/create', params);
+  const created = await runtime.client.request<Record<string, unknown>>('session/create', params);
   o.method('session/create', true, Date.now() - t);
 
   const newId = extractSessionId(created);
   if (!newId) {
-    // Report what actually came back rather than only that we could not read it: the response shape
-    // is the thing a reader needs, and hiding it turns a schema question into a mystery.
     o.fail(
       `session/create returned no sessionId, so the session cannot be confirmed. ` +
         `Response was: ${JSON.stringify(created).slice(0, 500)}`,
@@ -246,12 +264,6 @@ async function doCreate(
     return finish(ctx, o, runId);
   }
 
-  // Read back by LISTING rather than by reading the session.
-  //
-  // `session/read` returns a snapshot whose sessionId is nested (and whose projection reports
-  // "unknown" for a session that has not run a turn yet), so comparing against its top level
-  // produced a false mismatch on a create that had actually succeeded. Appearing in the list is
-  // shape-independent and is the thing that matters: the session was persisted and is addressable.
   try {
     const t2 = Date.now();
     const listed = await runtime.client.request<{ sessions?: Array<Record<string, unknown>> }>('session/list', {});
@@ -259,11 +271,18 @@ async function doCreate(
     const found = (listed?.sessions ?? []).some((x) => extractSessionId(x) === newId);
     o.readBack(found, found ? undefined : `created ${newId} but it does not appear in session/list`);
 
-    // Mode is reported, not asserted: the snapshot's projection carries defaults until a turn runs,
-    // so a difference here is not evidence the create failed.
     const rec = (listed?.sessions ?? []).find((x) => extractSessionId(x) === newId);
     const observedMode = typeof rec?.mode === 'string' ? rec.mode : null;
     o.result({ session_id: newId, mode: observedMode, requested_mode: params.mode ?? null, session: rec ?? null });
+
+    o.warn(
+      'session_not_persisted_yet',
+      `session ${newId} has no database row until it is first used. The runtime writes it from ` +
+        'ensureSessionPersisted at turn start (see .re/findings_ADDENDUM.md A21), so a send that ' +
+        'tries to admit input into it as a separate step will fail its foreign key. Use ' +
+        'zcode_chat send without session_id, or pass first_input here, to create and use in one command.',
+      'degraded',
+    );
     if (params.mode && observedMode && observedMode !== params.mode) {
       o.warn(
         'mode_not_applied',
@@ -276,6 +295,59 @@ async function doCreate(
     o.method('session/list', false, 0, describe(err));
     o.fail(`session ${newId} was created but could not be confirmed: ${describe(err)}`);
     o.result({ session_id: newId });
+  }
+  return finish(ctx, o, runId);
+}
+
+/** Create and use in one ordered command, so the session exists on disk and is addressable. */
+async function createWithFirstInput(
+  ctx: ServerContext,
+  o: Outcome,
+  runtime: Runtime,
+  workspace: string,
+  firstInput: string,
+  args: Record<string, unknown>,
+  runId: string,
+): Promise<Envelope> {
+  const commandId = `mcp_create_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const t = Date.now();
+  const res = await runtime.client.request<{ status?: string; reasonCode?: string; message?: string; result?: { sessionId?: unknown } }>(
+    'v4/command',
+    {
+      commandId,
+      clientId: 'mnehmos.zcode.mcp',
+      sessionId: null,
+      type: 'createSession',
+      payload: { workspaceId: workspace, firstInput: { text: firstInput } },
+      issuedAt: Date.now(),
+    },
+  );
+  o.method('v4/command:createSession', true, Date.now() - t);
+  o.result(res);
+
+  const status = typeof res.status === 'string' ? res.status : 'unknown';
+  if (status !== 'accepted') {
+    o.fail(`createSession was not accepted: ${status}${res.reasonCode ? ` (${res.reasonCode})` : ''}`);
+    return finish(ctx, o, runId);
+  }
+  const newId = typeof res.result?.sessionId === 'string' ? res.result.sessionId : null;
+  if (!newId) {
+    o.fail('createSession was accepted but returned no sessionId');
+    return finish(ctx, o, runId);
+  }
+
+  // Read back from the DATABASE state the runtime reports, not from the create response.
+  try {
+    const t2 = Date.now();
+    const listed = await runtime.client.request<{ sessions?: Array<Record<string, unknown>> }>('session/list', {});
+    o.method('session/list', true, Date.now() - t2);
+    const found = (listed?.sessions ?? []).some((x) => extractSessionId(x) === newId);
+    o.readBack(found, found ? undefined : `created ${newId} but it does not appear in session/list`);
+    const rec = (listed?.sessions ?? []).find((x) => extractSessionId(x) === newId);
+    o.result({ session_id: newId, created_with_first_input: true, session: rec ?? null });
+  } catch (err) {
+    o.method('session/list', false, 0, describe(err));
+    o.fail(`session ${newId} was created but could not be confirmed: ${describe(err)}`);
   }
   return finish(ctx, o, runId);
 }

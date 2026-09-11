@@ -65,6 +65,10 @@ export interface Runtime {
   /** Protocol identity, filled in on first contact. */
   protocol: { name: string; version: number } | null;
   runtimeVersion: string | null;
+  /** True once the connection-level event subscription is established. */
+  subscribed: boolean;
+  /** Set when that subscription failed; surfaces as a degraded warning rather than silence. */
+  subscribeError: string | null;
 }
 
 export interface RegistryOptions {
@@ -185,6 +189,8 @@ export class RuntimeRegistry {
       keyMismatch: null,
       protocol: null,
       runtimeVersion: null,
+      subscribed: false,
+      subscribeError: null,
     };
 
     this.runtimes.set(workspaceKey, runtime);

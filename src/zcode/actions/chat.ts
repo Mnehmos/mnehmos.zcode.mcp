@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import type { ServerContext } from '../../context.js';
 import { Outcome, localEnvelope, type Envelope } from '../../envelope.js';
 import { AuditDb } from '../../storage/db.js';
-import { isTerminalTurn, TerminalWaitTimeoutError } from '../events.js';
+import { isTerminalTurn, subscribeSession, TerminalWaitTimeoutError } from '../events.js';
 import { describe, resolveWorkspace, workspaceRequired } from './status.js';
 
 /** Command types this tool emits. The runtime accepts 30; we use the ones we have contracts for. */
@@ -51,10 +51,14 @@ export async function chatDispatch(
 ): Promise<Envelope> {
   const action = String(args.action);
   const sessionId = typeof args.session_id === 'string' ? args.session_id : '';
-  if (!sessionId) {
+
+  // `send` may omit session_id: with none, the runtime's own createSession path is used, which
+  // creates the session AND admits the first input atomically. Doing those as two calls is what
+  // broke ordering before — see .re/findings_ADDENDUM.md A21.
+  if (!sessionId && action !== 'send') {
     return localEnvelope({ tool: 'zcode_chat', action }, null, {
       ok: false,
-      errors: ['session_id is required'],
+      errors: [`session_id is required for ${action}`],
     });
   }
 
@@ -85,11 +89,13 @@ export async function chatDispatch(
 async function send(
   ctx: ServerContext,
   workspace: string,
-  sessionId: string,
+  sessionIdIn: string,
   args: Record<string, unknown>,
 ): Promise<Envelope> {
   const text = typeof args.text === 'string' ? args.text : '';
-  const runId = AuditDb.newRunId('zcode_chat', 'send');
+  const creating = sessionIdIn === '';
+  let sessionId = sessionIdIn;
+  const runId = AuditDb.newRunId('zcode_chat', creating ? 'send+create' : 'send');
   const o = new Outcome({ tool: 'zcode_chat', action: 'send', mode: 'child', payloadSource: 'protocol', mutates: true });
 
   const acquired = await acquireOrFail(ctx, o, workspace, runId);
@@ -116,8 +122,14 @@ async function send(
   const waitTimeout = typeof args.wait_timeout_ms === 'number' ? args.wait_timeout_ms : 600_000;
   const idempotencyKey = typeof args.idempotency_key === 'string' ? args.idempotency_key : undefined;
 
-  const beforeTurn = buffer.latestTurnId(sessionId);
-  const commandId = commandIdFor(sessionId, text, idempotencyKey);
+  // For an EXISTING session, subscribe before sending: otherwise the send races the subscription
+  // and every early event is lost. For a NEW one the id does not exist yet, so it is subscribed
+  // below, the moment createSession returns it.
+  let subscribed = false;
+  if (!creating) subscribed = await trySubscribe(o, runtime, sessionId);
+
+  const beforeTurn = creating ? null : buffer.latestTurnId(sessionId);
+  const commandId = commandIdFor(creating ? workspace : sessionId, text, idempotencyKey);
 
   const payload: Record<string, unknown> = { text };
   if (Array.isArray(args.tool_denylist) && args.tool_denylist.length > 0) {
@@ -125,14 +137,26 @@ async function send(
   }
   if (typeof args.delivery === 'string') payload.delivery = { requested: args.delivery };
 
-  const envelope = {
-    commandId,
-    clientId: 'mnehmos.zcode.mcp',
-    sessionId,
-    type: CMD_SEND,
-    payload,
-    issuedAt: Date.now(),
-  };
+  // Two shapes, and which one is correct depends on whether the session already exists.
+  // createSession takes the workspace plus a firstInput and persists the session as part of the
+  // same command, so the input can never be admitted into a row that does not exist yet.
+  const envelope = creating
+    ? {
+        commandId,
+        clientId: 'mnehmos.zcode.mcp',
+        sessionId: null,
+        type: 'createSession',
+        payload: { workspaceId: workspace, firstInput: { text, ...(typeof args.delivery === 'string' ? { delivery: args.delivery } : {}) } },
+        issuedAt: Date.now(),
+      }
+    : {
+        commandId,
+        clientId: 'mnehmos.zcode.mcp',
+        sessionId,
+        type: CMD_SEND,
+        payload,
+        issuedAt: Date.now(),
+      };
 
   const t0 = Date.now();
   let res: CommandResult;
@@ -148,6 +172,17 @@ async function send(
   o.result(res);
 
   const status = typeof res.status === 'string' ? res.status : 'unknown';
+
+  if (creating && status === 'accepted') {
+    const created = (res.result as { sessionId?: unknown } | undefined)?.sessionId;
+    if (typeof created === 'string') {
+      sessionId = created;
+      subscribed = await trySubscribe(o, runtime, sessionId);
+    } else {
+      o.fail('createSession was accepted but returned no sessionId, so the turn cannot be followed');
+      return finish(ctx, o, runId);
+    }
+  }
 
   // Map the runtime's own vocabulary. None of these is a completed turn.
   switch (status) {
@@ -187,6 +222,21 @@ async function send(
     return finish(ctx, o, runId);
   }
 
+  // Without a subscription no terminal event can ever arrive, so waiting would burn the entire
+  // timeout to learn nothing. Return the admission honestly instead of hanging.
+  if (!subscribed) {
+    o.warn(
+      'subscribe_failed',
+      'could not subscribe to this session, so no turn events can be observed; returning the ' +
+        'admission without waiting rather than blocking for the full timeout',
+      'degraded',
+    );
+    o.readBackUnavailable('admitted but unobservable: the session subscription is not established');
+    o.result({ status, session_id: sessionId, ...(creating ? { created: true } : {}), turn: { outcome: 'unknown' } });
+    o.setStderrTail(runtime.transport.stderrLines);
+    return finish(ctx, o, runId);
+  }
+
   // Identify the turn we just started. The result may carry one; otherwise watch the buffer for a
   // turn id that differs from the one before we submitted.
   const turnId = await identifyTurn(buffer, sessionId, beforeTurn, res, 20_000);
@@ -200,6 +250,8 @@ async function send(
     const toolCalls = buffer.countToolCalls(sessionId, turnId);
     o.result({
       status,
+      session_id: sessionId,
+      ...(creating ? { created: true } : {}),
       ...(res.reasonCode ? { reason_code: res.reasonCode } : {}),
       turn: {
         turn_id: terminal.turnId ?? turnId,
@@ -387,6 +439,13 @@ async function waitOnly(
 
   const timeout = typeof args.timeout_ms === 'number' ? args.timeout_ms : 600_000;
   const collect = typeof args.collect === 'string' ? args.collect : 'final';
+
+  if (!(await trySubscribe(o, runtime, sessionId))) {
+    o.warn('subscribe_failed', 'could not subscribe to this session, so no events can be observed', 'degraded');
+    o.readBackUnavailable('unobservable: the session subscription is not established');
+    o.result({ turn: { session_id: sessionId, outcome: 'unknown' } });
+    return finish(ctx, o, runId);
+  }
   const turnId = buffer.latestTurnId(sessionId);
 
   try {
@@ -434,6 +493,29 @@ async function acquireOrFail(
     o.fail(err instanceof Error ? err.message : String(err));
     finish(ctx, o, runId);
     return null;
+  }
+}
+
+/**
+ * Subscribe, reporting failure as a warning rather than throwing.
+ *
+ * Returns false when the subscription could not be established — which callers use to decide
+ * whether waiting is even meaningful.
+ */
+async function trySubscribe(
+  o: Outcome,
+  runtime: Awaited<ReturnType<ServerContext['acquire']>>['runtime'],
+  sessionId: string,
+): Promise<boolean> {
+  if (!sessionId) return false;
+  const t = Date.now();
+  try {
+    await subscribeSession(runtime.client, sessionId);
+    o.method('session/subscribe', true, Date.now() - t);
+    return true;
+  } catch (err) {
+    o.method('session/subscribe', false, Date.now() - t, describe(err));
+    return false;
   }
 }
 

@@ -133,21 +133,33 @@ Expect `ok:true`, `result.version` = the runtime version, `result.protocol` =
 ```
 Expect real sessions, real token figures, and a server list. No turn has run.
 
-### Step 3 — a non-mutating turn (the P1 acceptance test)
+### Step 3 — a real turn (the P1 acceptance test) — **now passing**
 
 ```jsonc
 { "tool": "zcode_chat",
   "arguments": {
-    "action": "send",
-    "session_id": "sess_…",
     "text": "List the top-level files and summarise the project in two sentences.",
-    "tool_allowlist": ["Read", "Glob", "Grep"],
-    "idempotency_key": "quickstart-1"
+    "tool_denylist": ["Write", "Edit", "ApplyPatch"]
   } }
 ```
-Expect `ok:true`, `result.turn.outcome === "completed"`, non-empty `result.text`, and
-`result.turn.tool_calls.denied === 0`. `tool_allowlist` here makes the turn *incapable* of writing —
-this is the safest possible first real call.
+
+**Omit `session_id`.** That is not laziness: with no session, the runtime's own `createSession`
+command is used, which writes the session record and admits the first input in one ordered
+operation. Sending to a freshly created session as a separate step fails its foreign key, because
+the row does not exist until the session is first used (`.re/findings_ADDENDUM.md` A21).
+
+Observed result:
+
+```json
+{"ok": true,
+ "result": {"status": "accepted", "session_id": "sess_…", "created": true,
+            "turn": {"turn_id": "turn_…", "outcome": "completed", "result_type": "success",
+                     "tool_calls": {"total": 0, "denied": 0, "failed": 0}},
+            "text": "…"}}
+```
+
+`result_type` comes from the runtime's own terminal event and distinguishes a completed turn from a
+cancellation (`cancelled`) or a budget stop (`error_max_turns`, `error_max_budget`).
 
 ### Step 4 — prove the honesty rule
 

@@ -96,6 +96,11 @@ export class ServerContext extends EventEmitter {
     policy.attach(rt.client);
 
     const ctx: RuntimeContext = { runtime: rt, buffer, policy };
+
+    // Events require a PER-SESSION subscription, so there is nothing useful to do at connection
+    // level: `v4/controller/subscribe` is in the v4 enum but this build answers -32601 for it.
+    // `zcode_chat` subscribes the session it is about to use, before it waits on anything.
+
     this.byWorkspace.set(rt.workspaceKey, ctx);
     return ctx;
   }

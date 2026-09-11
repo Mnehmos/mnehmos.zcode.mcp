@@ -30,14 +30,14 @@ Single project: `src/`, `test/`, `tools/`, `data/`, `work/` at the repository ro
 
 **Purpose**: a repository that builds, lints and smoke-tests before any ZCode knowledge is encoded.
 
-- [ ] T001 Create the directory tree from `plan.md` → `src/{schema,zcode/actions,storage}`, `test/`, `tools/`, `data/`, `work/`
-- [ ] T002 Write `package.json` (name `mnehmos.zcode.mcp`, `type: module`, `bin.mnehmos-zcode-mcp`, deps `@modelcontextprotocol/sdk`, `zod`, `zod-to-json-schema`, `better-sqlite3`; scripts `build`, `typecheck`, `start`, `test`, `test:only`, `test:it`, `methods`, `smoke`)
-- [ ] T003 [P] Write `tsconfig.json` and `tsconfig.test.json` (ES2022, NodeNext, strict)
-- [ ] T004 [P] Write `jest.config.js` (ts-jest ESM preset, `testPathIgnorePatterns` for integration unless `ZCODE_MCP_IT=1`)
-- [ ] T005 [P] Write `.gitignore` covering `node_modules/`, `dist/`, `work/`, `data/audit.db*`, `*.log`
-- [ ] T006 [P] Write `LICENSE` (MIT) and a stub `README.md`
-- [ ] T007 Write `src/index.ts` skeleton: MCP `Server` + `StdioServerTransport`, empty `ListTools`/`CallTool` handlers, and a `--self-test` branch that prints what it checked and exits
-- [ ] T008 [P] Write `test/setup.ts` with fixtures for a fake runtime bundle path
+- [x] T001 Create the directory tree from `plan.md` → `src/{schema,zcode/actions,storage}`, `test/`, `tools/`, `data/`, `work/`
+- [x] T002 Write `package.json` (name `mnehmos.zcode.mcp`, `type: module`, `bin.mnehmos-zcode-mcp`, deps `@modelcontextprotocol/sdk`, `zod`, `zod-to-json-schema`, `better-sqlite3`; scripts `build`, `typecheck`, `start`, `test`, `test:only`, `test:it`, `methods`, `smoke`)
+- [x] T003 [P] Write `tsconfig.json` and `tsconfig.test.json` (ES2022, NodeNext, strict)
+- [x] T004 [P] Write `jest.config.js` (ts-jest ESM preset, `testPathIgnorePatterns` for integration unless `ZCODE_MCP_IT=1`)
+- [x] T005 [P] Write `.gitignore` covering `node_modules/`, `dist/`, `work/`, `data/audit.db*`, `*.log`
+- [x] T006 [P] Write `LICENSE` (MIT) and a stub `README.md`
+- [x] T007 Write `src/index.ts` skeleton: MCP `Server` + `StdioServerTransport`, empty `ListTools`/`CallTool` handlers, and a `--self-test` branch that prints what it checked and exits
+- [x] T008 [P] Write `test/setup.ts` with fixtures for a fake runtime bundle path
 
 **Checkpoint**: `npm run build && npm run smoke` exits 0 with no ZCode code yet.
 
@@ -51,8 +51,8 @@ Single project: `src/`, `test/`, `tools/`, `data/`, `work/` at the repository ro
 
 ### Contracts and configuration
 
-- [ ] T009 Implement `src/schema/env.ts` — the zod environment contract from `plan.md` §4, including all four opt-in guard flags and the verified-flag table constant for headless mode
-- [ ] T010 [P] Write `test/env.test.ts` — defaults, guard-flag parsing, discovery order precedence, missing-workspace failure
+- [x] T009 Implement `src/schema/env.ts` — the zod environment contract from `plan.md` §4, including all four opt-in guard flags and the verified-flag table constant for headless mode
+- [x] T010 [P] Write `test/env.test.ts` — defaults, guard-flag parsing, discovery order precedence, missing-workspace failure
 - [ ] T011 Implement `src/zcode/catalog.ts` — load `data/zcode_protocol_methods.json`, expose `isMutating(method)`, `isReadOnly(method)`, `matchesAllowlist(method, globs)`, and the protocol identity assertion helper
 - [ ] T012 [P] Write `tools/zcode_methods.py` — extract the 66 method names and their `read_only`/`mutating` classification from the installed bundle, writing `data/zcode_protocol_methods.json`
 - [ ] T013 [P] Generate `data/zcode_protocol_methods.json` by running T012 against `resources/glm/zcode.cjs`
@@ -60,21 +60,21 @@ Single project: `src/`, `test/`, `tools/`, `data/`, `work/` at the repository ro
 
 ### The transport (highest risk)
 
-- [ ] T015 Implement `src/zcode/transport.ts` — spawn `node <bundle> app-server --stdio --cwd <workspace>` with piped stdio; NDJSON codec (write `JSON.stringify(msg) + "\n"`, split stdout on `\n`); classify each inbound line as response / error-response / server-request / notification; enforce the 1 MiB frame limit **before** write; capture stderr separately; kill the owned process group on every exit path
-- [ ] T016 [P] Write `test/transport.test.ts` — NDJSON split across chunk boundaries, multiple frames in one chunk, a frame over 1 MiB is refused without writing, an unparseable line is reported not thrown, and a server-request is classified distinctly from a notification
-- [ ] T017 Implement `src/zcode/protocol.ts` — id allocation (monotonic, stringified on send), pending map, per-request timeout (default 180 s), `AbortSignal` support, error mapping to the classes in `contracts/_envelope.md`
+- [x] T015 Implement `src/zcode/transport.ts` — spawn `node <bundle> app-server --stdio --cwd <workspace>` with piped stdio; NDJSON codec (write `JSON.stringify(msg) + "\n"`, split stdout on `\n`); classify each inbound line as response / error-response / server-request / notification; enforce the 1 MiB frame limit **before** write; capture stderr separately; kill the owned process group on every exit path
+- [x] T016 [P] Write `test/transport.test.ts` — NDJSON split across chunk boundaries, multiple frames in one chunk, a frame over 1 MiB is refused without writing, an unparseable line is reported not thrown, and a server-request is classified distinctly from a notification
+- [x] T017 Implement `src/zcode/protocol.ts` — id allocation (monotonic, stringified on send), pending map, per-request timeout (default 180 s), `AbortSignal` support, error mapping to the classes in `contracts/_envelope.md`
 - [ ] T018 [P] Write `test/protocol.test.ts` — id allocation, timeout raises the timeout error and clears pending, abort rejects with an abort error, `-32601`/`-32602`/`-32603`/`-32004` map to the documented errors, and a closed transport surfaces `ZCode agent stdio transport is closed`
-- [ ] T019 Implement `src/zcode/registry.ts` — `Map<workspaceKey, Runtime>`; lazy spawn; startup grace (`ZCODE_MCP_STARTUP_MS`); idle eviction (`ZCODE_MCP_CHILD_IDLE_MS`); child cap (`ZCODE_MCP_MAX_CHILDREN`); dead-child respawn; graceful shutdown that reaps all children
-- [ ] T020 [P] Write `test/registry.test.ts` — reuse for the same key, separate children for different keys, cap enforced, idle eviction closes the child, a dead child is respawned on next use
+- [x] T019 Implement `src/zcode/registry.ts` — `Map<workspaceKey, Runtime>`; lazy spawn; startup grace (`ZCODE_MCP_STARTUP_MS`); idle eviction (`ZCODE_MCP_CHILD_IDLE_MS`); child cap (`ZCODE_MCP_MAX_CHILDREN`); dead-child respawn; graceful shutdown that reaps all children
+- [x] T020 [P] Write `test/registry.test.ts` — reuse for the same key, separate children for different keys, cap enforced, idle eviction closes the child, a dead child is respawned on next use
 
 ### Envelope, provenance, redaction
 
-- [ ] T021 Implement `src/envelope.ts` — the `RunOutcome` record and the shared envelope from `contracts/_envelope.md`, with `warnings[].impact` routing and the rule that `ok:true` past a mutating action requires a read-back or an explicit degraded/unreliable warning
-- [ ] T022 [P] Write `test/envelope.test.ts` — shape stability, impact routing, error-mapping table, and that a mutating action with no read-back and no warning is rejected by the builder
-- [ ] T023 Implement `src/storage/db.ts` — `better-sqlite3` open/migrate against the DDL in `data-model.md` §B3, `recordRun`, `recordArtifact`, `recordProtocolCall`, `recentRuns`
-- [ ] T024 [P] Write `test/db.test.ts` — migrations are idempotent, one row per call, artifacts recorded with bytes and sha256, index-backed queries work
-- [ ] T025 Implement the redactor (in `src/envelope.ts` or a small `src/zcode/redact.ts`) — `apiKey`, `authorization`, `*token*`, `*secret*`, `*password*` → `[REDACTED]`, applied to wire lines, results and audit rows
-- [ ] T026 [P] Write `test/redact.test.ts` — synthetic secrets injected into a wire line, a result object and an audit row are all scrubbed; nested objects and arrays covered; `ZCODE_MCP_REDACT=0` relaxes wire scrubbing but never the settings-tool redaction
+- [x] T021 Implement `src/envelope.ts` — the `RunOutcome` record and the shared envelope from `contracts/_envelope.md`, with `warnings[].impact` routing and the rule that `ok:true` past a mutating action requires a read-back or an explicit degraded/unreliable warning
+- [x] T022 [P] Write `test/envelope.test.ts` — shape stability, impact routing, error-mapping table, and that a mutating action with no read-back and no warning is rejected by the builder
+- [x] T023 Implement `src/storage/db.ts` — `better-sqlite3` open/migrate against the DDL in `data-model.md` §B3, `recordRun`, `recordArtifact`, `recordProtocolCall`, `recentRuns`
+- [x] T024 [P] Write `test/db.test.ts` — migrations are idempotent, one row per call, artifacts recorded with bytes and sha256, index-backed queries work
+- [x] T025 Implement the redactor (in `src/envelope.ts` or a small `src/zcode/redact.ts`) — `apiKey`, `authorization`, `*token*`, `*secret*`, `*password*` → `[REDACTED]`, applied to wire lines, results and audit rows
+- [x] T026 [P] Write `test/redact.test.ts` — synthetic secrets injected into a wire line, a result object and an audit row are all scrubbed; nested objects and arrays covered; `ZCODE_MCP_REDACT=0` relaxes wire scrubbing but never the settings-tool redaction
 
 ### Provider bootstrap
 
@@ -85,19 +85,19 @@ Single project: `src/`, `test/`, `tools/`, `data/`, `work/` at the repository ro
 
 ### Policy (must exist before any turn can run)
 
-- [ ] T031 Implement `src/zcode/policy.ts` — modes `deny`(default)/`allow`/`ask`/allowlist-file; a pending-request store; responders for `session/requestRuntimePreferences`, `interaction/requestProviderRuntimeHeaders`, `interaction/browserList`, `interaction/browserExecute`, `interaction/requestOfficialMcpAuthHeaders`; wired into the transport's server-request path
-- [ ] T032 [P] Write `test/policy.test.ts` — default is deny; allowlist matching on `toolName` and `toolName(ruleContent)`; `ask` parks and lists; each always-answered request kind returns its canned response; a parked request is never left unanswered silently
+- [x] T031 Implement `src/zcode/policy.ts` — modes `deny`(default)/`allow`/`ask`/allowlist-file; a pending-request store; responders for `session/requestRuntimePreferences`, `interaction/requestProviderRuntimeHeaders`, `interaction/browserList`, `interaction/browserExecute`, `interaction/requestOfficialMcpAuthHeaders`; wired into the transport's server-request path
+- [x] T032 [P] Write `test/policy.test.ts` — default is deny; allowlist matching on `toolName` and `toolName(ruleContent)`; `ask` parks and lists; each always-answered request kind returns its canned response; a parked request is never left unanswered silently
 
 ### Events
 
-- [ ] T033 Implement `src/zcode/events.ts` — subscribe to `session/event` notifications, bounded ring buffer per session (`ZCODE_MCP_EVENT_BUFFER`), de-duplication by `eventId`, ordering by `seq`, plus `waitForTerminalTurn(sessionId, turnId, timeoutMs)`
-- [ ] T034 [P] Write `test/events.test.ts` — buffer bound enforced; duplicate `eventId` delivered once; out-of-order `seq` handled; `waitForTerminalTurn` resolves on `turn.completed` and rejects on `turn.failed`, and times out cleanly
+- [x] T033 Implement `src/zcode/events.ts` — subscribe to `session/event` notifications, bounded ring buffer per session (`ZCODE_MCP_EVENT_BUFFER`), de-duplication by `eventId`, ordering by `seq`, plus `waitForTerminalTurn(sessionId, turnId, timeoutMs)`
+- [x] T034 [P] Write `test/events.test.ts` — buffer bound enforced; duplicate `eventId` delivered once; out-of-order `seq` handled; `waitForTerminalTurn` resolves on `turn.completed` and rejects on `turn.failed`, and times out cleanly
 
 ### First tool surface
 
-- [ ] T035 Implement `src/schema/tools.ts` — the zod discriminated union for **all 14 tools** (argument contracts only; dispatchers arrive per story), built from `contracts/`
-- [ ] T036 [P] Write `test/schema.test.ts` — a minimal valid call for every action of every tool; every action present in the tool's description; budget-check test asserting the tool count
-- [ ] T037 Wire `src/index.ts` to `tools.ts` — `ListTools` from zod-to-json-schema, `CallTool` validating then dispatching, with unknown action and invalid params handled before any process work
+- [x] T035 Implement `src/schema/tools.ts` — the zod discriminated union for **all 14 tools** (argument contracts only; dispatchers arrive per story), built from `contracts/`
+- [x] T036 [P] Write `test/schema.test.ts` — a minimal valid call for every action of every tool; every action present in the tool's description; budget-check test asserting the tool count
+- [x] T037 Wire `src/index.ts` to `tools.ts` — `ListTools` from zod-to-json-schema, `CallTool` validating then dispatching, with unknown action and invalid params handled before any process work
 
 **Checkpoint**: ⚠️ **T015 and T027 must be proven against the real installation before any user story
 proceeds.** Run the `quickstart.md` §2 probe and the §3 provider check manually. If T015 or T027 fails,
@@ -116,24 +116,24 @@ stop and resolve it — nothing downstream can be validated without them.
 
 > Write these first; they must fail before T041–T046 exist.
 
-- [ ] T038 [P] [US1] `test/chat.contract.test.ts` — every row of the success-rule table in `contracts/zcode_chat.md` is asserted: completed → ok; failed → not ok; `noop` → **not ok**; `accepted` + timeout → ok **degraded**; `wait:false` → ok **degraded**; turn mismatch → not ok
+- [x] T038 [P] [US1] `test/chat.contract.test.ts` — every row of the success-rule table in `contracts/zcode_chat.md` is asserted: completed → ok; failed → not ok; `noop` → **not ok**; `accepted` + timeout → ok **degraded**; `wait:false` → ok **degraded**; turn mismatch → not ok
 - [ ] T039 [P] [US1] `test/chat.idempotency.test.ts` — the same `idempotency_key` produces the same command id and is reported as an idempotent replay; a different key produces a different id
 - [ ] T040 [P] [US1] `test/integration.test.ts` (opt-in) — real runtime: a read-only turn reaches a terminal state with non-empty text; one audit row exists; **no orphan `app-server` processes remain after the suite**
 
 ### Implementation for User Story 1
 
-- [ ] T041 [US1] Implement `src/zcode/actions/chat.ts` action `send` — build the `v4/command` envelope `{commandId, sessionId, type:'sendText', payload:{text, attachments, delivery, toolDisallowlist}}`; derive `commandId` from `(sessionId, hash(text), idempotency_key)`; subscribe **before** sending so no early events are lost
-- [ ] T042 [US1] Add `collect:'final'` assembly — accumulate assistant text from `part.*` events for the turn, summarise tool calls from `tool.updated`, and read usage from the session projection
-- [ ] T043 [US1] Add the terminal-observation rule — `waitForTerminalTurn` gates `ok`; the degraded paths from T038 are implemented exactly as specified (this is Constitution Article II in code)
+- [x] T041 [US1] Implement `src/zcode/actions/chat.ts` action `send` — build the `v4/command` envelope `{commandId, sessionId, type:'sendText', payload:{text, attachments, delivery, toolDisallowlist}}`; derive `commandId` from `(sessionId, hash(text), idempotency_key)`; subscribe **before** sending so no early events are lost
+- [x] T042 [US1] Add `collect:'final'` assembly — accumulate assistant text from `part.*` events for the turn, summarise tool calls from `tool.updated`, and read usage from the session projection
+- [x] T043 [US1] Add the terminal-observation rule — `waitForTerminalTurn` gates `ok`; the degraded paths from T038 are implemented exactly as specified (this is Constitution Article II in code)
 - [ ] T044 [US1] Implement `src/zcode/attachments.ts` — `begin`/`chunk` (≤512 KiB)/`commit` upload with the size and chunk-count guards, used by `send` when an attachment is a local path
-- [ ] T045 [US1] Implement actions `stop`, `cancel_background`, `steer`, `wait`
-- [ ] T046 [US1] Wire `src/zcode/policy.ts` into the live path and assert that a denied tool appears in `result.turn.tool_calls.denied`
+- [x] T045 [US1] Implement actions `stop`, `cancel_background`, `steer`, `wait`
+- [x] T046 [US1] Wire `src/zcode/policy.ts` into the live path and assert that a denied tool appears in `result.turn.tool_calls.denied`
 
 ### Tools for User Story 1
 
-- [ ] T047 [US1] Implement `src/zcode/actions/session.ts` actions `create`, `list`, `get` — the minimum needed to obtain a `sessionId`, each with the read-back required by `contracts/zcode_session.md`
-- [ ] T048 [US1] Implement `src/zcode/actions/status.ts` action `probe` — the diagnostic entry point (version, doctor, protocol identity, session count)
-- [ ] T049 [US1] Implement `src/zcode/actions/approval.ts` — `policy`, `list`, `respond`, so a turn can never deadlock on an unanswered request
+- [x] T047 [US1] Implement `src/zcode/actions/session.ts` actions `create`, `list`, `get` — the minimum needed to obtain a `sessionId`, each with the read-back required by `contracts/zcode_session.md`
+- [x] T048 [US1] Implement `src/zcode/actions/status.ts` action `probe` — the diagnostic entry point (version, doctor, protocol identity, session count)
+- [x] T049 [US1] Implement `src/zcode/actions/approval.ts` — `policy`, `list`, `respond`, so a turn can never deadlock on an unanswered request
 
 **Checkpoint**: US1 is fully functional and independently demonstrable. This is the MVP.
 
@@ -153,8 +153,8 @@ data, and no turn ran.
 
 ### Implementation for User Story 2
 
-- [ ] T052 [P] [US2] `src/zcode/actions/status.ts` — actions `runtimes`, `workspace`, `sessions`, `doctor`, `runs`
-- [ ] T053 [P] [US2] `src/zcode/actions/session.ts` — read actions `list` (filters/limits), `get`, `subagents`, `usage`
+- [x] T052 [P] [US2] `src/zcode/actions/status.ts` — actions `runtimes`, `workspace`, `sessions`, `doctor`, `runs`
+- [x] T053 [P] [US2] `src/zcode/actions/session.ts` — read actions `list` (filters/limits), `get`, `subagents`, `usage`
 - [ ] T054 [P] [US2] `src/zcode/actions/usage.ts` — `stats` with the mandatory `range`
 - [ ] T055 [P] [US2] `src/zcode/actions/mcp.ts` — actions `list`, `status`, `servers`, including the documented start side effect and the `started[]` reporting
 - [ ] T056 [P] [US2] `src/zcode/actions/plugins.ts` — read actions `list`, `overview`, `describe`, `validate`
