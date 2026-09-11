@@ -746,3 +746,106 @@ desktop creates a session in the same workspace and diff the params against ours
 | `-32022` on a raw client | the runtime's `session/requestRuntimePreferences` **client request** timing out because nothing answered it — proof that the policy module is load-bearing, observed from the other side |
 | Workspace keys need canonicalising | the same directory arriving with forward slashes (`.env`) and backslashes (ZCode) produced a false key-mismatch warning until `path.resolve` was applied to the path component |
 | The install model catalogue is nested | `endpoints: {baseURL, paths: {anthropic, openai-compatible}}`, unlike the flattened vendored copy. Reading it through the flat interface silently yielded `baseURL: undefined`, which looks like "this provider has no endpoint" rather than "we parsed it wrong" |
+
+---
+
+## A21. ✅ M4 REACHED — and A20 was OUR misuse, not a ZCode bug. Two separate mistakes.
+
+**A turn ran to completion against DeepSeek.** Full trace from the runtime's own log:
+
+```
+18:53:16  zcode_protocol.session_create.started
+18:53:18  zcode_protocol.session_create.completed
+18:53:18  core.runtime::session.persistence.started     <- the session row IS written
+18:53:18  core.runtime::session.persistence.completed
+18:53:18  turn.phase  context_initialization -> session_start_hooks
+18:53:18  turn.started
+18:53:18  turn.phase  session_persistence -> target_read -> turn_started_event
+18:53:19  turn.phase  regular_turn_loop
+18:53:21  adapters.model::model.request.completed        <- a real model call
+18:53:24  adapters.model::model.sdk.stream.completed     <- streaming
+18:53:25  core.runtime::turn.completed                   <- TERMINAL
+```
+
+Row in `db.sqlite`: `sess_61b0a02f-…`, `project_id: proj_f-github-mcp-mnehmos.zcode.mcp`,
+`title: "Reply with M4-OK"`, `session_input` row `kind=sendText delivery=startNow status=promoted`.
+
+### Mistake 1 — the wrong create path
+
+`session/create` followed by a separate `sendText` is **not** how the platform creates a session. The
+platform's own path is a single command:
+
+```js
+// v4 createSession payload
+{ workspaceId, firstInput: { text }, config?, mcpServers? }
+```
+
+and its handler does the two steps **in order and atomically**:
+
+```js
+let {sessionId: n} = await e.createSessionRecord({workspaceId: r.workspaceId, mcpServers: r.mcpServers});
+if (r.config) { … apply config … }
+if (r.firstInput) { … admitInputCommand(t, n, …) … }
+```
+
+Splitting them is what broke the order: my `sendText` admitted input into a session whose row did not
+exist yet, so `session_input.session_id -> session.id` failed.
+
+### Mistake 2 — no subscription, so no events
+
+The turn above completed at 18:53:25, inside my probe's 120 s window, and my probe still reported
+"no terminal turn event". Events only flow for a **subscribed** session. `attachEventBuffer` listens
+for whatever arrives; nothing was subscribed, so nothing arrived.
+
+### The red herring I chased
+
+`session.model_selection.persist_failed` looked like the smoking gun. It is not:
+
+| Day | occurrences | whose sessions |
+|---|---|---|
+| 09-07 | 3 | the desktop, before this project touched anything |
+| 09-08 | 11 | the desktop |
+| 09-09 | 16 | the desktop |
+| 09-10 | 8 | the desktop |
+| 09-11 | 7 | mixed |
+
+and for a working session the sequence is:
+
+```
+14:42:55  session.model_selection.persist_failed   sess_8db1ca01
+14:45:27  session.persistence.completed            sess_8db1ca01   <- persists anyway, fine
+```
+
+It fires at `bootstrap`, twice, for every session including the desktop's own, and is **harmless**.
+I over-weighted a warning that ZCode emits routinely.
+
+### The mechanics, now known exactly
+
+`persistence: "deferred"` is the platform's own default (hardcoded in its `createSessionRecord`
+adapter). The session row is written by `ensureSessionPersisted` (registered name of `sGr`), which is
+called from exactly three places — **all turn-start paths**:
+
+| Caller | When |
+|---|---|
+| the regular turn path, phase `session_persistence` | first turn |
+| `compact` | compaction |
+| `rewind` | rewind |
+
+So a session created but never turned **has no row, by design**. The row appears when the session is
+first used, which is the same turn whose input needs it — the platform resolves that by admitting the
+first input **inside** the create command, after the record step.
+
+Practically: `session/create` is fine for "make me a session"; it is the *ordering* of a separate
+input admission that must never precede first use.
+
+### What this changes in the MCP
+
+- `zcode_chat send` must use `v4/command {type:"createSession", payload:{workspaceId, firstInput}}` when
+  the caller has no session yet, and `{type:"sendText"}` only for an existing, already-used session.
+- It must **subscribe** before waiting for terminal events.
+- `zcode_session create` currently leaves a session that cannot be sent to as a separate step; it should
+  either create with the first input, or warn that the session has no row until first use.
+
+Genuinely useful outcome of chasing this: we now know the exact ordering contract, and the honesty rule
+held throughout — every failure was reported as a failure with ZCode's own reason code, never as a
+success.
