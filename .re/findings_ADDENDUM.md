@@ -922,3 +922,72 @@ schema.
 All 19 `workspace` fields are now optional; `resolveWorkspace` supplies the default and, when neither
 source has one, the tool refuses with an explicit message. `zcode_usage` and `zcode_chat` already
 worked this way, which is what made the inconsistency visible.
+
+---
+
+## A23. `v4/conversation/fileChanges` needs a revision a bare app-server does not expose
+
+**RESOLVES T029 — by finding the tokens, then finding that one of them is unobtainable.**
+
+### The tokens are real, and named
+
+`v4/conversation/rowsRange` returns:
+
+```json
+{ "rows": [ … ], "atSeq": 10, "atLogEpoch": "mtxef5c8-qdsym9l6", "hasMore": false }
+```
+
+Those ARE the compare-and-swap values:
+
+| wire name | comes from | status |
+|---|---|---|
+| `baseLogEpoch` | `rowsRange.atLogEpoch` | ✅ **accepted** — no `staleLogEpoch` |
+| `baseRevision` | *unknown* | ❌ **every candidate rejected** |
+
+A fabricated epoch is correctly rejected (`baseLogEpoch: "e"` → `proto.staleLogEpoch`), which proves
+the check runs and that the epoch above is the right value. The revision is the problem.
+
+### Every derivable revision is rejected
+
+| candidate | value at test time | result |
+|---|---|---|
+| `session/read` → `runtime.stateRevision` | 0 | `proto.staleRevision` |
+| `rowsRange.atSeq` | 10 | `proto.staleRevision` |
+| `atSeq - 1` | 9 | `proto.staleRevision` |
+| first row's `createdAtSeq` | 3 | `proto.staleRevision` |
+| `0` | 0 | `proto.staleRevision` |
+
+The revision the runtime compares against is a snapshot field (`t.getSnapshot().revision`) that is
+not surfaced to this client by any call tried.
+
+### The obvious escape does not open either
+
+`v4/conversation/subscribe` would plausibly establish the conversation publisher whose snapshot
+carries the revision, but its schema on this surface differs from the host-side form extracted from
+the bundle: passing `{topic, subscriptionId, connectionId, clientMode}` is rejected with
+`unrecognized_keys: ["subscriptionId"]`.
+
+### Consequence: a declared non-capability, not a retry loop
+
+`zcode_files changes` and `rewind_preview` now report `token_unobtainable` with
+`impact: unreliable` and name the reason, instead of a retry that can never succeed. Reporting a
+capability gap is honest; a retry loop that always fails is noise that looks like flakiness.
+
+**The actions that DO work** — and they are the ones that matter most — need no tokens:
+
+| action | works | why |
+|---|---|---|
+| `read_attachment` | ✅ | no tokens |
+| `put_attachment` | ✅ | staged upload, verified by reading the ref back |
+| `rewind_apply` | ✅ | implemented as a **fork**, which is the safe form anyway |
+
+### Pattern across A22 and A23
+
+Two methods — `automation/*` and `v4/conversation/fileChanges` — exist in the protocol's vocabulary
+and resolve to `-32601` or an unsatisfiable precondition on a bare `app-server`. Both appear to be
+**host-tier capabilities**: the desktop's host provides the publisher and the scheduler, and its
+client inherits them. This is the first concrete cost of Tier A being the only local boundary, and it
+is worth stating plainly: an owned runtime is a *subset* of what the desktop can do.
+
+The read surface that matters is unaffected. Sessions, messages, rows, models, usage, plugins, MCP
+inventory and real turns all work; only the diff/rewind-record view and scheduling do not.

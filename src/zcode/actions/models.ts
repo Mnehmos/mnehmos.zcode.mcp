@@ -222,7 +222,7 @@ async function available(
     },
     session_model: sessionModel,
   });
-  o.readBackUnavailable('this action reports live state; it changes none');
+  o.readOnly();
   return finish(ctx, o, runId);
 }
 
@@ -256,7 +256,7 @@ async function current(
     o.method('workspace/readState', true, Date.now() - t);
     o.result({ scope: 'workspace', workspace_key: runtime.workspaceKey, model: state?.settings?.model?.current ?? null });
   }
-  o.readBackUnavailable('this action reports live state; it changes none');
+  o.readOnly();
   return finish(ctx, o, runId);
 }
 

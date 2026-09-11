@@ -35,6 +35,10 @@ import {
   usageDispatch,
   zcodeMcpDispatch,
 } from './zcode/actions/readsurface.js';
+import { conversationDispatch } from './zcode/actions/conversation.js';
+import { filesDispatch } from './zcode/actions/files.js';
+import { settingsDispatch } from './zcode/actions/settings.js';
+import { headlessDispatch, protocolDispatch } from './zcode/actions/protocol.js';
 import { createTransport } from './zcode/transport.js';
 import { TOOL_REGISTRY } from './schema/tools.js';
 import * as path from 'node:path';
@@ -240,15 +244,20 @@ async function dispatch(ctx: ServerContext, tool: string, args: Record<string, u
       return pluginsDispatch(ctx, args);
     case 'zcode_mcp':
       return zcodeMcpDispatch(ctx, args);
+    case 'zcode_conversation':
+      return conversationDispatch(ctx, args);
+    case 'zcode_files':
+      return filesDispatch(ctx, args);
+    case 'zcode_settings':
+      return settingsDispatch(ctx, args);
+    case 'zcode_protocol':
+      return protocolDispatch(ctx, args);
+    case 'zcode_headless':
+      return headlessDispatch(ctx, args);
     default:
       return localEnvelope({ tool, action: actionOf(args) }, null, {
         ok: false,
-        errors: [
-          `tool '${tool}' is declared but not yet implemented. ` +
-            'Implemented: zcode_status, zcode_session, zcode_chat, zcode_models, zcode_approval, ' +
-            'zcode_usage, zcode_automation, zcode_plugins, zcode_mcp. ' +
-            'See specs/001-zcode-control/tasks.md for the build order.',
-        ],
+        errors: [`unknown tool: ${tool}`],
       });
   }
 }

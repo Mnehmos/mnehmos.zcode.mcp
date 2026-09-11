@@ -27,7 +27,12 @@ export const Range = z.enum(['all', '7d', '30d']);
  */
 const Workspace = z.string().trim().min(1).optional();
 const SessionId = z.string().trim().min(1).describe('A sessionId from zcode_session list, e.g. sess_…');
-const RowId = z.string().trim().min(1);
+/**
+ * Conversation row ids are NUMBERS — `rowsRange` returns `rowId: 1`, and passing the string
+ * "1" to fileChanges is rejected with `expected number`. A numeric string is coerced rather
+ * than refused, because a caller copying an id out of JSON-as-text is a reasonable mistake.
+ */
+const RowId = z.coerce.number().int().nonnegative();
 
 /** Bounded integers, per the protocol's own limits. */
 const Limit200 = z.number().int().min(1).max(200);
@@ -140,8 +145,20 @@ export const ConversationArgs = z.discriminatedUnion('action', [
 // ── zcode_files ──────────────────────────────────────────────────────────────
 
 export const FilesArgs = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('changes'), session_id: SessionId, row_id: RowId }),
-  z.object({ action: z.literal('rewind_preview'), session_id: SessionId, row_id: RowId }),
+  z.object({
+    action: z.literal('changes'),
+    session_id: SessionId,
+    row_id: RowId,
+    entity_id: z.string().min(1).optional().describe(
+      'Optional. Resolved from the row when omitted, which costs one extra read.',
+    ),
+  }),
+  z.object({
+    action: z.literal('rewind_preview'),
+    session_id: SessionId,
+    row_id: RowId,
+    entity_id: z.string().min(1).optional(),
+  }),
   z.object({ action: z.literal('rewind_apply'), session_id: SessionId, checkpoint_id: z.string().min(1).optional(), confirm: z.literal(true) }),
   z.object({
     action: z.literal('read_attachment'),
