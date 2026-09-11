@@ -196,8 +196,10 @@ export class Outcome {
 
   /** Assemble the envelope, enforcing the read-back rule for mutating actions. */
   finalise(): Envelope {
-    if (this.mutates && this.readBackState === null) {
-      // A dispatcher forgot. Treat as degraded rather than crashing, but never as a clean success.
+    // The invariant is: ok:true for a mutation requires a read-back. A call that already failed has
+    // nothing to verify, so flagging it here would be noise — and noise is how a reader learns to
+    // ignore the warning that matters.
+    if (this.mutates && this.readBackState === null && this.okFlag) {
       this.warn(
         'read_back_missing',
         'this action mutates ZCode state but did not record a read-back; treat the result as unverified',

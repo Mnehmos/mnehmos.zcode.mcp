@@ -45,6 +45,22 @@ describe('Outcome — the read-back rule', () => {
     expect(e.evidence.warnings[0]).toMatchObject({ code: 'read_back_unavailable', impact: 'degraded' });
   });
 
+  it('does NOT flag a missing read-back when the mutation failed before running', () => {
+    // A call that errored has nothing to verify. Warning anyway trains the reader to ignore the
+    // warning that actually matters.
+    const o = new Outcome({ tool: 'zcode_session', action: 'create', mutates: true });
+    o.fail('Model config is missing.');
+    const e = o.finalise();
+    expect(e.ok).toBe(false);
+    expect(e.evidence.warnings.find((w) => w.code === 'read_back_missing')).toBeUndefined();
+  });
+
+  it('still flags a missing read-back when the mutation reported success', () => {
+    const o = new Outcome({ tool: 'zcode_session', action: 'close', mutates: true });
+    o.result({ closed: true });
+    expect(o.finalise().evidence.warnings.find((w) => w.code === 'read_back_missing')).toBeDefined();
+  });
+
   it('does not require a read-back for a read-only action', () => {
     const o = new Outcome({ tool: 'zcode_usage', action: 'stats', mutates: false });
     o.result({ total: 1 });
