@@ -521,3 +521,55 @@ local control and is explicitly out of scope for v1.
 **Unchanged**: the core thesis — spawn `app-server`, speak NDJSON ZCode Protocol, own the policy, read
 back every mutation — is confirmed and strengthened. `--stdio` being a no-op (A1) actually makes the
 transport *simpler* than assumed.
+
+---
+
+## A18. `.re` correction: `resources/glm/zcode.cjs` is the DESKTOP-EMBEDDED runtime, not the full CLI
+
+Found while checking whether ZCode supports a terminal mode. It does — it always has.
+
+**Evidence.** Running `tui` from the desktop bundle:
+
+```
+$ node E:\zcodeesources\glm\zcode.cjs tui
+Error: Cannot find package '@zcode/tui' imported from E:\zcodeesources\glm\zcode.cjs
+```
+
+And the loader that produces it (`eyn`, "loadTuiRuntime"):
+
+```js
+const e = await import("node:sea");
+if (!e.isSea()) return await import("@zcode/tui");          // normal install: the package itself
+const t = await HUi(e);                                      // SEA build: extract the embedded blob
+return await import(pathToFileURL(join(t, "node_modules/@zcode/tui/dist/index.js")).href);
+// Q_n = "zcode-tui-runtime/"   WUi = "node_modules/@zcode/tui/dist/index.js"
+```
+
+**What this means.**
+
+| Fact | Detail |
+|---|---|
+| The TUI exists and is the **default** mode | `commandName = e => e[0] ?? "tui"`; `zcode --help` → *"With no command, zcode opens the full-screen TUI."* |
+| It is a **separate workspace package** | `@zcode/tui`, entry `dist/index.js` |
+| It is **lazily imported** | so `app-server` does not pay for it — good design, and why our probe was fast |
+| There is a **SEA distribution** | `node:sea` path extracts `zcode-tui-runtime/<version>/<target>/<hash>/` from an embedded blob, cached on disk, keyed by version `0.16.5` |
+| The desktop bundle omits it | `doctor` reports `sea: no`, so it takes the `import("@zcode/tui")` branch and fails — the package is simply not shipped in `resources/glm/` |
+
+**Corrections this forces on the audit:**
+
+1. `resources/glm/zcode.cjs` is the **desktop-embedded agent-runtime build**, not the full `zcode` CLI.
+   Its `--help` therefore advertises surface the bundle cannot execute. Treat any subcommand other
+   than `app-server` / `agent-server` / `doctor` / `login` / `logout` / `plugins` / `skills` /
+   `commands` / `version` as unverified in this build.
+2. The earlier note that the CLI "opens the full-screen TUI" is correct about the product and
+   misleading about this artifact. The correct statement: **the TUI is a real, first-class CLI mode
+   in a separately-distributed build; the desktop bundle does not contain it.**
+3. Workspace package names confirmed by reference in the bundle: `@zcode/tui`,
+   `@zcode/cli-agent-telemetry`, `@zcode/telemetry` — consistent with the monorepo layout
+   (`apps/zcode-cli/packages/{cli,tui,…}`) implied by `.node-bundle-meta.json`'s
+   `source: apps/zcode-cli/packages/cli/dist/zcode.cjs`.
+
+**Consequence for `mnehmos.zcode.mcp`: none.** The MCP depends on `app-server`, which is fully present
+and is the one subcommand the desktop build is built to run. This is recorded because it changes what
+we may claim about the CLI surface, and because anyone reaching for `--output-format`/`--mode` should
+know they are exercising the *CLI* contract, not the desktop runtime's.
