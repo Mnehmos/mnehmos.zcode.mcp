@@ -20,9 +20,19 @@ export const Mode = z.enum(['plan', 'build', 'edit', 'yolo', 'auto']);
 export const Range = z.enum(['all', '7d', '30d']);
 
 /** A workspace path or a workspaceKey previously returned by ZCode. */
-const Workspace = z.string().trim().min(1);
+/**
+ * A workspace path or key. Optional everywhere: `ZCODE_MCP_WORKSPACE` supplies a default, and
+ * requiring it in the schema would reject calls this server can serve. When neither is available
+ * the tool refuses with an explicit message rather than guessing.
+ */
+const Workspace = z.string().trim().min(1).optional();
 const SessionId = z.string().trim().min(1).describe('A sessionId from zcode_session list, e.g. sess_…');
-const RowId = z.string().trim().min(1);
+/**
+ * Conversation row ids are NUMBERS — `rowsRange` returns `rowId: 1`, and passing the string
+ * "1" to fileChanges is rejected with `expected number`. A numeric string is coerced rather
+ * than refused, because a caller copying an id out of JSON-as-text is a reasonable mistake.
+ */
+const RowId = z.coerce.number().int().nonnegative();
 
 /** Bounded integers, per the protocol's own limits. */
 const Limit200 = z.number().int().min(1).max(200);
@@ -44,7 +54,7 @@ const Guard = z.object({ confirm: z.literal(true) }).describe('Required for dest
 export const StatusArgs = z.discriminatedUnion('action', [
   z.object({ action: z.literal('runtimes') }),
   z.object({ action: z.literal('workspace'), workspace: Workspace.optional() }),
-  z.object({ action: z.literal('sessions'), workspace: Workspace.optional(), limit: Limit200.optional() }),
+  z.object({ action: z.literal('sessions'), workspace: Workspace, limit: Limit200.optional() }),
   z.object({ action: z.literal('probe'), workspace: Workspace.optional() }),
   z.object({ action: z.literal('doctor'), workspace: Workspace.optional() }),
   z.object({ action: z.literal('runs'), limit: Limit200.optional() }),
@@ -53,7 +63,7 @@ export const StatusArgs = z.discriminatedUnion('action', [
 // ── zcode_session ────────────────────────────────────────────────────────────
 
 export const SessionArgs = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('list'), workspace: Workspace.optional(), limit: Limit200.optional() }),
+  z.object({ action: z.literal('list'), workspace: Workspace, limit: Limit200.optional() }),
   z.object({ action: z.literal('get'), session_id: SessionId }),
   z.object({
     action: z.literal('create'),
@@ -135,8 +145,20 @@ export const ConversationArgs = z.discriminatedUnion('action', [
 // ── zcode_files ──────────────────────────────────────────────────────────────
 
 export const FilesArgs = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('changes'), session_id: SessionId, row_id: RowId }),
-  z.object({ action: z.literal('rewind_preview'), session_id: SessionId, row_id: RowId }),
+  z.object({
+    action: z.literal('changes'),
+    session_id: SessionId,
+    row_id: RowId,
+    entity_id: z.string().min(1).optional().describe(
+      'Optional. Resolved from the row when omitted, which costs one extra read.',
+    ),
+  }),
+  z.object({
+    action: z.literal('rewind_preview'),
+    session_id: SessionId,
+    row_id: RowId,
+    entity_id: z.string().min(1).optional(),
+  }),
   z.object({ action: z.literal('rewind_apply'), session_id: SessionId, checkpoint_id: z.string().min(1).optional(), confirm: z.literal(true) }),
   z.object({
     action: z.literal('read_attachment'),
@@ -274,14 +296,14 @@ export const ModelsArgs = z.discriminatedUnion('action', [
     reasoning_level: z.string().min(1).optional(),
     kind: z.enum(['anthropic', 'openai', 'openai-compatible']).optional(),
   }),
-  z.object({ action: z.literal('available'), workspace: Workspace.optional(), session_id: SessionId.optional() }),
-  z.object({ action: z.literal('current'), workspace: Workspace.optional(), session_id: SessionId.optional() }),
+  z.object({ action: z.literal('available'), workspace: Workspace, session_id: SessionId.optional() }),
+  z.object({ action: z.literal('current'), workspace: Workspace, session_id: SessionId.optional() }),
   z.object({
     action: z.literal('select'),
     scope: z.enum(['server', 'workspace', 'session']).optional().describe('Default: session.'),
     model: z.string().min(1).describe('"<model>" or "<provider>/<model>".'),
     provider: z.string().min(1).optional().describe('Required for scope "server".'),
-    workspace: Workspace.optional(),
+    workspace: Workspace,
     session_id: SessionId.optional(),
   }),
 ]);
@@ -329,7 +351,7 @@ export const ProtocolArgs = z.discriminatedUnion('action', [
     action: z.literal('call'),
     method: z.string().min(1).max(200),
     params: z.record(z.string(), z.unknown()).optional(),
-    workspace: Workspace.optional(),
+    workspace: Workspace,
     session_id: SessionId.optional(),
     timeout_ms: z.number().int().min(1_000).max(600_000).optional(),
   }),

@@ -1,6 +1,6 @@
 {
   "name": "mnehmos.zcode.mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -31,7 +31,7 @@
   ],
   "author": "Mnehmos",
   "license": "MIT",
-  "description": "MCP server exposing ZCode's agent runtime as a bounded semantic control surface. Owns a ZCode agent process per workspace and speaks the ZCode Protocol over stdio; every mutation is read back before it is reported.",
+  "description": "MCP server exposing ZCode's agent runtime as a bounded semantic control surface. Owns a ZCode agent process per workspace and speaks the ZCode Protocol over stdio; every mutation is read back before it is reported, and two capabilities a bare runtime cannot provide are declared rather than faked.",
   "repository": {
     "type": "git",
     "url": "https://github.com/Mnehmos/mnehmos.zcode.mcp.git"

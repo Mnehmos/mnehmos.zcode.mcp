@@ -185,6 +185,18 @@ export class Outcome {
     return this;
   }
 
+  /**
+   * Declare that this action changed nothing, so the read-back rule does not apply.
+   *
+   * Deliberately silent. `readBackUnavailable` warns, which is right for a MUTATION that cannot be
+   * verified — but a read has nothing to verify, and warning on every read made four of four
+   * read-only tools carry a spurious `degraded`. Noise is how a reader learns to ignore warnings.
+   */
+  readOnly(): this {
+    this.readBackState = { attempted: false };
+    return this;
+  }
+
   result<T>(value: T): T {
     this.value = value;
     return value;

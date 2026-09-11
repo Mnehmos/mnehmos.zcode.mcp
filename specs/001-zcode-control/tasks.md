@@ -80,7 +80,7 @@ Single project: `src/`, `test/`, `tools/`, `data/`, `work/` at the repository ro
 
 - [x] T027 Implement `src/zcode/settings.ts` — **DONE, and simpler than planned.** Delivery is environment-only: `ZCODE_MODEL` + `ZCODE_BASE_URL` + `ZCODE_API_KEY` in the child (the agent's `parseEnvConfig`, priority-40 config layer). **No file is written**: the project/user config routes were tried and rejected a minimal `model` block silently. See `.re/findings_ADDENDUM.md` §A19
 - [x] T028 [P] Write `test/settings.test.ts` — **DONE.** Key-candidate order, provider normalisation, refusal shapes, the `ZCODE_BASE_URL` dual-purpose warning, and that no file path is ever produced.
-- [ ] T029 Implement `src/zcode/logtokens.ts` — obtain `logEpoch`/`revision`, issue the request, retry **once** on `proto.staleLogEpoch`/`proto.staleRevision`, then report degraded with both token sets
+- [x] T029 Implement `src/zcode/logtokens.ts` — obtain `logEpoch`/`revision`, issue the request, retry **once** on `proto.staleLogEpoch`/`proto.staleRevision`, then report degraded with both token sets
 - [ ] T030 [P] Write `test/logtokens.test.ts` — success path echoes tokens; one stale marker triggers exactly one retry; a second stale marker yields `ok:false` with `stale_after_retry` degraded
 
 ### Policy (must exist before any turn can run)
@@ -155,12 +155,12 @@ data, and no turn ran.
 
 - [x] T052 [P] [US2] `src/zcode/actions/status.ts` — actions `runtimes`, `workspace`, `sessions`, `doctor`, `runs`
 - [x] T053 [P] [US2] `src/zcode/actions/session.ts` — read actions `list` (filters/limits), `get`, `subagents`, `usage`
-- [ ] T054 [P] [US2] `src/zcode/actions/usage.ts` — `stats` with the mandatory `range`
-- [ ] T055 [P] [US2] `src/zcode/actions/mcp.ts` — actions `list`, `status`, `servers`, including the documented start side effect and the `started[]` reporting
-- [ ] T056 [P] [US2] `src/zcode/actions/plugins.ts` — read actions `list`, `overview`, `describe`, `validate`
-- [ ] T057 [P] [US2] `src/zcode/actions/automation.ts` — action `list`
-- [ ] T058 [US2] `src/zcode/actions/conversation.ts` — actions `rows`, `messages`, `events`, `plans`, all routed through `logtokens.ts`
-- [ ] T059 [US2] `src/zcode/actions/protocol.ts` — actions `methods` and `call` with the allowlist and mutation gate enforced
+- [x] T054 [P] [US2] `src/zcode/actions/usage.ts` — `stats` with the mandatory `range`
+- [x] T055 [P] [US2] `src/zcode/actions/mcp.ts` — actions `list`, `status`, `servers`, including the documented start side effect and the `started[]` reporting
+- [x] T056 [P] [US2] `src/zcode/actions/plugins.ts` — read actions `list`, `overview`, `describe`, `validate`
+- [x] T057 [P] [US2] `src/zcode/actions/automation.ts` — action `list`
+- [x] T058 [US2] `src/zcode/actions/conversation.ts` — actions `rows`, `messages`, `events`, `plans`, all routed through `logtokens.ts`
+- [x] T059 [US2] `src/zcode/actions/protocol.ts` — actions `methods` and `call` with the allowlist and mutation gate enforced
 
 **Checkpoint**: the whole read model is available and provably inert.
 
@@ -180,11 +180,11 @@ opt-in and assert refusal.
 
 ### Implementation for User Story 3
 
-- [ ] T062 [P] [US3] `src/zcode/actions/settings.ts` — protocol actions `read_state`, `set_default_model`, `set_default_mode`, `set_default_thought_level`, `update_interaction_prefs`, `update_model_io_prefs`, `hook_trust_grant`
-- [ ] T063 [US3] `src/zcode/actions/settings.ts` — file actions `get` (redacted), `set_desktop` (additive patch, backup, re-read, restart warning)
-- [ ] T064 [US3] `src/zcode/actions/settings.ts` — guarded provider actions `upsert_provider`, `remove_provider`, `update_provider_registry`
-- [ ] T065 [P] [US3] `src/zcode/actions/session.ts` — mutating actions `resume`, `close`, `fork`, `compact`, `set_model`, `set_mode`, `set_thought_level`, `goal`, each with its read-back
-- [ ] T066 [US3] `src/zcode/actions/automation.ts` — `create`, `update`, `delete`, `check_binding`, including the 20-cap passthrough and the unattended-authority warning in the tool description
+- [x] T062 [P] [US3] `src/zcode/actions/settings.ts` — protocol actions `read_state`, `set_default_model`, `set_default_mode`, `set_default_thought_level`, `update_interaction_prefs`, `update_model_io_prefs`, `hook_trust_grant`
+- [x] T063 [US3] `src/zcode/actions/settings.ts` — file actions `get` (redacted), `set_desktop` (additive patch, backup, re-read, restart warning)
+- [x] T064 [US3] `src/zcode/actions/settings.ts` — guarded provider actions `upsert_provider`, `remove_provider`, `update_provider_registry`
+- [x] T065 [P] [US3] `src/zcode/actions/session.ts` — mutating actions `resume`, `close`, `fork`, `compact`, `set_model`, `set_mode`, `set_thought_level`, `goal`, each with its read-back
+- [x] T066 [US3] `src/zcode/actions/automation.ts` — `create`, `update`, `delete`, `check_binding`, including the 20-cap passthrough and the unattended-authority warning in the tool description
 
 **Checkpoint**: configuration is safe, reversible and honest about when it takes effect.
 
@@ -205,8 +205,8 @@ assert the read-back plus the budget warning.
 ### Implementation for User Story 4
 
 - [ ] T069 [P] [US4] `src/zcode/actions/plugins.ts` — mutating actions `set_enabled`, `configure`, `reset_config` with read-back and the budget warning
-- [ ] T070 [P] [US4] `src/zcode/actions/plugins.ts` — guarded actions `install`, `update`, `uninstall`, `marketplace`, `cancel_operation`, with progress reporting from `plugins/operationProgress`
-- [ ] T071 [US4] `src/zcode/actions/mcp.ts` — guarded `add_server`, `remove_server`
+- [x] T070 [P] [US4] `src/zcode/actions/plugins.ts` — guarded actions `install`, `update`, `uninstall`, `marketplace`, `cancel_operation`, with progress reporting from `plugins/operationProgress`
+- [x] T071 [US4] `src/zcode/actions/mcp.ts` — guarded `add_server`, `remove_server`
 
 **Checkpoint**: the extension surface is manageable with every hazard disclosed.
 
@@ -238,7 +238,7 @@ changed.
 ## Phase 8: Polish & Cross-Cutting Concerns
 
 - [ ] T077 `src/zcode/actions/command.ts` — actions `catalog`, `query`, `execute` with the admission-only honesty rule
-- [ ] T078 `src/zcode/actions/headless.ts` — `prompt`, emitting **only** verified flags, returning `stdout_raw` always, and warning on unverified arguments
+- [x] T078 `src/zcode/actions/headless.ts` — `prompt`, emitting **only** verified flags, returning `stdout_raw` always, and warning on unverified arguments
 - [ ] T079 Complete the flag-matrix experiment (`ZCODE_UNKNOWNS.md` U-13) and update the verified-flag table plus its test
 - [ ] T080 [P] Resolve `ZCODE_UNKNOWNS.md` U-5 by probing `-32602` paths for the remaining `v4/command` payload types, and tighten `src/schema/tools.ts` accordingly
 - [ ] T081 [P] Write `AGENTS.md`, `ARCHITECTURE.md`, `HANDOFF.md` and the real `README.md` with the per-tool read-only/mutating table (Constitution Article VII)
