@@ -531,8 +531,10 @@ Found while checking whether ZCode supports a terminal mode. It does — it alwa
 **Evidence.** Running `tui` from the desktop bundle:
 
 ```
-$ node E:\zcodeesources\glm\zcode.cjs tui
-Error: Cannot find package '@zcode/tui' imported from E:\zcodeesources\glm\zcode.cjs
+$ node E:\zcode
+esources\glm\zcode.cjs tui
+Error: Cannot find package '@zcode/tui' imported from E:\zcode
+esources\glm\zcode.cjs
 ```
 
 And the loader that produces it (`eyn`, "loadTuiRuntime"):
@@ -573,3 +575,89 @@ return await import(pathToFileURL(join(t, "node_modules/@zcode/tui/dist/index.js
 and is the one subcommand the desktop build is built to run. This is recorded because it changes what
 we may claim about the CLI surface, and because anyone reaching for `--output-format`/`--mode` should
 know they are exercising the *CLI* contract, not the desktop runtime's.
+
+---
+
+## A19. ✅ Provider bootstrap is ENVIRONMENT-ONLY — and the file path does not work
+
+**RESOLVES the delivery question left open by A14**, and corrects the plan, which specified writing a
+generated settings file.
+
+### What was tried first, and why it failed
+
+A14 concluded the project config layer (priority 20) was the delivery mechanism. It is a real layer —
+`L_r()` really does probe `zcode.json` and `.zcode/config.json` up the ancestor chain, and `_5o()`
+really does set `loaded:true` when it finds them — but **a minimal `model` block is not accepted**:
+
+| Attempt | Result |
+|---|---|
+| `<workspace>/.zcode/config.json` with `{model:{main:{provider,model,kind,baseURL,apiKey}}}` | `Model config is missing` |
+| `<workspace>/zcode.json`, same shape | `Model config is missing` |
+| `~/.zcode/cli/config.json` (user layer), same shape | `Model config is missing` |
+| Full default config (`Va`) **plus** `model.main` | `Model config is missing` |
+| **`ZCODE_MODEL` + `ZCODE_BASE_URL` + `ZCODE_API_KEY` in the environment** | **provider consumed** |
+
+The likely cause is that the config is validated by a strict zod schema (`bRn.parse`, applied via
+`qj()`), and the file loaders take a fallback path when validation fails — silently, with only a
+structured warning through `adapters.config`. A configuration mechanism that fails silently is not one
+to build a server on.
+
+### The mechanism that works
+
+`function gxe(env, {prefix = "ZCODE_"})` — "parseEnvConfig" — builds a whole config layer from the
+environment (`wc.Env`, priority **40**, above project and user):
+
+```js
+const zRo="ZCODE_", A_r="MODEL", URo="BASE_URL";
+function WRo(env, prefix) {                       // parseEnvModelTarget
+  const r = readNonEmptyEnv(env, prefix + MODEL); // ZCODE_MODEL
+  if (!r) return;
+  const n = parseModelRef(r, { defaultProviderId: "anthropic" });
+  const o = { kind: "anthropic", model: n.modelId, provider: n.providerId };
+  const i = readNonEmptyEnv(env, prefix + BASE_URL);   // ZCODE_BASE_URL
+  i && (o.baseURL = i);
+  return o;                                       // -> config.model.main
+}
+// and the same function reads, at this precedence:
+//   ZCODE_STORAGE_DIR, ZCODE_SESSION_DB_PATH|ZCODE_SESSION_DB, ZCODE_HTTP_PROXY,
+//   ZCODE_NO_PROXY, ZCODE_AGENT_CA_CERT, ZCODE_HTTP_TIMEOUT|ZCODE_TIMEOUT,
+//   ZCODE_LOG_FORMAT, ZCODE_MAX_TOOL_CONCURRENCY
+```
+
+So: **`ZCODE_MODEL` ("`<model>`" or "`<provider>/<model>`") + `ZCODE_BASE_URL` + `ZCODE_API_KEY`**,
+all in the child's environment.
+
+### Proof (CONFIRMED, and it cost nothing)
+
+```
+no-env    model.current = {"modelId":"missing-model","providerId":"zcode-unconfigured"}  catalog.available = 0
+with-env  model.current = {"modelId":"probe-model","providerId":"mcp-probe"}             catalog.available = 1
+```
+
+Two independent confirmations:
+1. **Headless**: with `ZCODE_MODEL` set, `zcode --prompt` stops saying *"Model config is missing"* and
+   instead fails at `APICallError: getaddrinfo ENOTFOUND example.invalid` — the config was consumed
+   and the call was attempted. Without it, the original error stands.
+2. **Protocol**: a spawned `app-server` reports the injected model in `workspace/readState`, and
+   `modelCatalog.available` goes from 0 to 1.
+
+No credential was used and no model call was made (the base URL is unresolvable on purpose), so
+proving M2 spends nothing.
+
+### Consequences
+
+1. **`src/zcode/settings.ts` writes no files.** The earlier design wrote
+   `<workspace>/.zcode/config.json` — polluting a user's working tree to configure a process we own,
+   and *not working anyway*. Environment-first is cleaner, more honest, and the only version that
+   functions. Constitution Articles IV and VII are satisfied trivially.
+2. **`kind` is pinned to `anthropic`** on this path (`WRo` hardcodes it). A provider that is genuinely
+   `openai-compatible` cannot be expressed through the environment; such a user must configure their
+   own file. `settings.ts` reports this rather than mangling the value.
+3. **`ZCODE_BASE_URL` is dual-purpose** — the same variable is read by `q2()` as the ZCode
+   control-plane endpoint origin (OAuth, plan, telemetry) *and* by `WRo` as the model base URL. For a
+   local agent runtime the control-plane origin is unused, but the collision is a genuine hazard and
+   `settings.ts` emits an `advisory` warning whenever it sets it.
+4. **`ZCODE_MODEL` will only take effect in a runtime that has no higher-priority model config.** A
+   user who has configured `model.main` in a config layer above priority 40 would be overriding
+   themselves; `settings.ts` therefore checks for an existing file-sourced provider first and stays
+   out of the way.

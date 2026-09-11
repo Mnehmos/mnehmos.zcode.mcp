@@ -125,10 +125,15 @@ transport kinds (`http`, `sse`, `websocket`), and failure kinds (`rate_limited`,
 `reasoning_signature_repair`, `offpeak_queued`, `auth_failed`, `cancelled`, `context_exceeded`,
 `invalid_request`, `provider_not_configured`, `proxy_error`, `tls_error`, `unknown`).
 
-**Remaining sub-question (still open, LOW):** which *delivery* mechanism is most robust for the
-generated config — a project-level config in `<workspace>/.zcode/`, `HOME` redirection to a per-child
-config dir, or `--settings` (which failed one probe run). See U-13. The schema itself is no longer a
-risk.
+**Delivery mechanism — RESOLVED (addendum §A19).** It is **environment-only**:
+`ZCODE_MODEL` (`"<model>"` or `"<provider>/<model>"`) + `ZCODE_BASE_URL` + `ZCODE_API_KEY`,
+read by `parseEnvConfig` as a priority-40 config layer. A minimal `model` block in
+`zcode.json`, `.zcode/config.json` **or** `~/.zcode/cli/config.json` is **not accepted** —
+those attempts all still reported "Model config is missing", most likely because the
+config is validated by a strict zod schema and the file loaders fall back silently.
+Proven both headless (the error changes from config-missing to a connection failure) and
+over the protocol (`model.current` changes from the `missing-model` sentinel, and
+`modelCatalog.available` goes 0 -> 1), at zero cost.
 
 ---
 
