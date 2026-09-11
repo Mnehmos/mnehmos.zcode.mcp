@@ -29,6 +29,12 @@ import { sessionDispatch } from './zcode/actions/session.js';
 import { chatDispatch } from './zcode/actions/chat.js';
 import { approvalDispatch } from './zcode/actions/approval.js';
 import { modelsDispatch } from './zcode/actions/models.js';
+import {
+  automationDispatch,
+  pluginsDispatch,
+  usageDispatch,
+  zcodeMcpDispatch,
+} from './zcode/actions/readsurface.js';
 import { createTransport } from './zcode/transport.js';
 import { TOOL_REGISTRY } from './schema/tools.js';
 import * as path from 'node:path';
@@ -226,12 +232,21 @@ async function dispatch(ctx: ServerContext, tool: string, args: Record<string, u
       return modelsDispatch(ctx, args);
     case 'zcode_approval':
       return approvalDispatch(ctx, args);
+    case 'zcode_usage':
+      return usageDispatch(ctx, args);
+    case 'zcode_automation':
+      return automationDispatch(ctx, args);
+    case 'zcode_plugins':
+      return pluginsDispatch(ctx, args);
+    case 'zcode_mcp':
+      return zcodeMcpDispatch(ctx, args);
     default:
       return localEnvelope({ tool, action: actionOf(args) }, null, {
         ok: false,
         errors: [
           `tool '${tool}' is declared but not yet implemented. ` +
-            'Implemented: zcode_status, zcode_session, zcode_chat, zcode_models, zcode_approval. ' +
+            'Implemented: zcode_status, zcode_session, zcode_chat, zcode_models, zcode_approval, ' +
+            'zcode_usage, zcode_automation, zcode_plugins, zcode_mcp. ' +
             'See specs/001-zcode-control/tasks.md for the build order.',
         ],
       });

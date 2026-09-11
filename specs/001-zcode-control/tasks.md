@@ -155,10 +155,10 @@ data, and no turn ran.
 
 - [x] T052 [P] [US2] `src/zcode/actions/status.ts` — actions `runtimes`, `workspace`, `sessions`, `doctor`, `runs`
 - [x] T053 [P] [US2] `src/zcode/actions/session.ts` — read actions `list` (filters/limits), `get`, `subagents`, `usage`
-- [ ] T054 [P] [US2] `src/zcode/actions/usage.ts` — `stats` with the mandatory `range`
-- [ ] T055 [P] [US2] `src/zcode/actions/mcp.ts` — actions `list`, `status`, `servers`, including the documented start side effect and the `started[]` reporting
-- [ ] T056 [P] [US2] `src/zcode/actions/plugins.ts` — read actions `list`, `overview`, `describe`, `validate`
-- [ ] T057 [P] [US2] `src/zcode/actions/automation.ts` — action `list`
+- [x] T054 [P] [US2] `src/zcode/actions/usage.ts` — `stats` with the mandatory `range`
+- [x] T055 [P] [US2] `src/zcode/actions/mcp.ts` — actions `list`, `status`, `servers`, including the documented start side effect and the `started[]` reporting
+- [x] T056 [P] [US2] `src/zcode/actions/plugins.ts` — read actions `list`, `overview`, `describe`, `validate`
+- [x] T057 [P] [US2] `src/zcode/actions/automation.ts` — action `list`
 - [ ] T058 [US2] `src/zcode/actions/conversation.ts` — actions `rows`, `messages`, `events`, `plans`, all routed through `logtokens.ts`
 - [ ] T059 [US2] `src/zcode/actions/protocol.ts` — actions `methods` and `call` with the allowlist and mutation gate enforced
 

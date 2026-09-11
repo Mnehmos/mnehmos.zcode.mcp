@@ -849,3 +849,76 @@ input admission that must never precede first use.
 Genuinely useful outcome of chasing this: we now know the exact ordering contract, and the honesty rule
 held throughout — every failure was reported as a failure with ZCode's own reason code, never as a
 success.
+
+---
+
+## A22. The read-only surface: three capability facts and one trap
+
+Found while implementing `zcode_usage`, `zcode_automation`, `zcode_plugins` and `zcode_mcp`.
+
+### A22.1 `automation/*` is a HOST-side capability — not available to a bare `app-server`
+
+```
+automation/list -> {"error":{"code":-32601,"message":"Method not found: automation/list"}}
+```
+
+CONFIRMED by probe. This is a correction to the audit's implication: the dispatch table I extracted
+from `zcode.cjs:3123` *does* contain `automationCreate`/`automationList`/`automationUpdate`/
+`automationDelete`, but that table is evidently not the one a bare `app-server` serves. Scheduling
+appears to belong to the host tier.
+
+Consequence: **`zcode_automation` cannot work in the owned-runtime configuration.** It now reports
+`method_not_supported` with `impact: unreliable` and names the reason, rather than surfacing a bare
+`-32601` that looks like a bug in the caller.
+
+This also means the earlier claim that automations are "agent-side, in the agent SQLite" (A6/A11) is
+too strong: the *table* is the desktop's (`~/.zcode/v2/tasks-index.sqlite`, per the state-model
+report), and the *methods* are not on the agent's protocol surface here.
+
+### A22.2 `mcp/list` is a heavy, load-sensitive operation whose result says nothing about the config
+
+Two runs, same config, minutes apart:
+
+| run | total tools | outcome |
+|---|---|---|
+| first | **83** | 6 of 7 connected; only `plugin:document-skills:image_search` failed |
+| later | **0** | all 7 `failed`, `failureKind: connection_timeout`, `after 30000ms` |
+
+The difference was machine load, not configuration. `mcp/list` **starts every configured server** and
+waits up to 30 s for each; with ~58 node/python processes already running on this machine, freshly
+spawned servers could not boot in time.
+
+Two consequences for the MCP:
+
+1. `zcode_mcp list` now emits `processes_started` and, when servers fail, reports them as **data**
+   (`some_servers_failed: advisory`, or `all_servers_failed: degraded`) rather than as a tool error.
+   A wall of `connection_timeout` is a statement about the machine at that moment.
+2. **The tool budget is real and observable.** 83 registered MCP tools against a ceiling the
+   provider enforces between 89 and 94 — the warning fires at `total_tools >= ZCODE_MCP_TOOL_BUDGET`
+   (default 88). This is the first hard measurement of that number rather than an inference from the
+   user's own profile script.
+
+No orphans were left by the probe runs: the MCP server processes observed during the check have
+**live** parents corresponding to active desktop sessions, not to my exited runtimes. The transport's
+owned-process-group kill is doing its job.
+
+### A22.3 A read-only action should not warn about read-back
+
+Four of four read-only tools were emitting `read_back_unavailable: degraded` — because
+`readBackUnavailable()` warns (correctly) for a *mutation* that cannot be verified, and I had reused
+it for reads. A read has nothing to verify, so the warning was pure noise on every read call.
+
+Added `Outcome.readOnly()`: marks the read-back as not-applicable **silently**. Same lesson as the
+`read_back_missing` fix in the tool-count commit — a warning that fires when nothing is wrong is how
+a reader learns to ignore the warning that matters.
+
+### A22.4 `workspace` must be optional in the tool schemas
+
+`zcode_plugins` refused with `invalid arguments — workspace: Required` even though
+`ZCODE_MCP_WORKSPACE` was set in `.env`, because the *schema* rejected the call before
+`resolveWorkspace` could fall back. A schema that rejects a call the server can serve is a bug in the
+schema.
+
+All 19 `workspace` fields are now optional; `resolveWorkspace` supplies the default and, when neither
+source has one, the tool refuses with an explicit message. `zcode_usage` and `zcode_chat` already
+worked this way, which is what made the inconsistency visible.
