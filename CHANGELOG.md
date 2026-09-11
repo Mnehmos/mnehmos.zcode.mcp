@@ -2,7 +2,7 @@
 
 All notable changes to this project. Format follows Keep a Changelog.
 
-## [Unreleased]
+## [0.1.0] - 2026-09-11
 
 ### Added — reverse-engineering audit
 
@@ -80,8 +80,49 @@ live NDJSON protocol probing.
 - Documented the permission broker's peer-credential checks and the Windows named-pipe namespace
   restriction that prevents it being repurposed as a general control channel.
 
+### Added — implementation (milestone M1)
+
+The transport is proven against the real ZCode runtime, not asserted.
+
+- `src/schema/env.ts` — environment contract, runtime discovery (including fixed drive roots,
+  because a ZCode install is commonly a directory at a drive root), the four opt-in guard flags,
+  and the table of CLI flags **verified to parse**.
+- `src/schema/tools.ts` — all **14** tool/action contracts as zod discriminated unions. Tool
+  descriptions carry the known hazards, because a hazard disclosed only in the README is
+  invisible to the model calling the server.
+- `src/zcode/redact.ts` — secret scrubbing by key name *and* by value shape.
+- `src/zcode/transport.ts` — the stdio transport: NDJSON codec, 1 MiB pre-send frame refusal,
+  stderr kept separate (the runtime logs there), owned-process-group kill verified on exit.
+- `src/index.ts` — MCP server skeleton plus a `--self-test` that exercises the control plane
+  and asserts it cleaned up.
+
+**Verified**
+```
+npm run typecheck                                    clean
+jest test/transport.test.ts                          14/14
+node dist/index.js --self-test                       PASS   runtime found, 23 sessions
+ZCODE_MCP_IT=1 jest test/integration.test.ts          5/5   against the real runtime
+```
+The integration suite proves: discovery, `session/list` returning 23 real sessions, `-32601` for
+an unknown method, refusal of an oversized frame before writing, and **no orphan process after
+dispose** (pid confirmed gone via `tasklist`). No model turn is run, so proving M1 costs nothing.
+
+**Not yet implemented:** `protocol.ts`, `registry.ts`, the response envelope, the audit database,
+the approval policy, event buffering, and every tool dispatcher. Tools that are declared but have
+no dispatcher refuse clearly rather than pretend.
+
+**Two deliberate deviations from the plan**
+1. `node:sqlite` replaces `better-sqlite3` — the same API the runtime itself uses, and it removes
+   the only native build dependency on Windows.
+2. 14 tools with action unions rather than one tool per operation, because the provider rejects
+   requests above roughly 89–94 registered tools with `[1210] Invalid API parameter`.
+
 ### Notes
 
 - No file outside this repository was modified during the audit. Two harmless `--prompt` attempts both
   failed before any model call, so no API spend was incurred.
-- The MCP server itself is **not implemented**. `specs/001-zcode-control/tasks.md` is the build order.
+- The MCP server is **partially implemented**: the control plane is proven (M1). The tool
+  dispatchers are not. `specs/001-zcode-control/tasks.md` is the build order, and T027 (provider
+  bootstrap) gates every path that costs money.
+- Branch model is gitflow: `main` is release-only, `develop` integrates, `feature/*` carries one
+  task cluster each. See `AGENTS.md`.
