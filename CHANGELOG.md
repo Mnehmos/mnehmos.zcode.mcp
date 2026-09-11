@@ -2,6 +2,86 @@
 
 All notable changes to this project. Format follows Keep a Changelog.
 
+## [0.2.0] - 2026-09-11
+
+**The first release that can actually drive ZCode.** A real agent turn runs end to end through an
+MCP tool call.
+
+### Added — the server works
+
+- **`zcode_status`** — `probe` / `workspace` / `sessions` / `runtimes` / `doctor` / `runs`.
+  `probe` is the diagnostic entry point: runtime identity, protocol version and session count in
+  one round trip, no turn started.
+- **`zcode_session`** — list / get / create / resume / close / fork / compact / set_model /
+  set_mode / set_thought_level / goal / subagents / usage. Every mutating action re-reads the
+  session and compares the field it changed; a mismatch FAILS the call.
+- **`zcode_chat`** — send / steer / stop / cancel_background / wait. Create-and-send in one
+  command, subscribe before waiting, and a terminal-event gate on success.
+- **`zcode_models`** — the model/provider decision surface: a filterable catalogue of 10 providers
+  and 130 models with context windows, modalities and reasoning levels, annotated with whether this
+  server holds a credential for each. Deliberately unranked — choosing is the caller's job.
+- **`zcode_approval`** — policy / list / respond, with deny-by-default and a separately gated path
+  for durable permission rules.
+
+### Added — infrastructure
+
+- `.env` workflow with `.env.example`: provider credentials resolved from the environment,
+  loaded explicitly via `npm run start:env` (never auto-read).
+- **Credential isolation**: a spawned runtime inherits everything *except* credential-shaped
+  variables, then receives back only the single resolved key. With several providers in one `.env`,
+  the runtime previously received all of them.
+- `tools/scan_secrets.py`, now the **first gate**: it collects the machine's real secrets and
+  searches every git object and commit message for them.
+- The addendum grew to 21 sections, including A13–A21: the credential-cipher weakness, the
+  environment-only provider bootstrap, the Web Remote Control negative result, and the two
+  ordering mistakes this milestone turned on.
+
+### Verified
+
+```
+npm run scan:secrets     CLEAN
+npm run typecheck        clean
+npm test                 159/159  across 9 suites
+npm run smoke            PASS
+ZCODE_MCP_IT=1 npm test  7/7      against the real runtime
+```
+
+A real turn, through the tool:
+
+```
+zcode_chat send { text: "Reply with exactly the token M4-FINAL…" }
+  ok = true            took 12.6s
+  turn  = {outcome: completed, result_type: success, tool_calls: {total: 0}}
+  text  = "M4-FINAL"
+```
+
+### Two mistakes worth recording
+
+1. **The wrong create path.** `session/create` followed by a separate `sendText` is not how the
+   platform creates a session. It writes the record and admits the first input as ONE command.
+   Splitting them admitted input into a session with no database row → foreign-key failure. The row
+   only appears when the session is first used, by design (`ensureSessionPersisted`, called from
+   turn-start paths only).
+2. **No subscription, so no events.** A turn can start *and complete* while the client sees nothing.
+   Two hours went into believing a turn had failed when it had succeeded nine seconds in.
+
+### Fixed
+
+- A real API key had been committed inside a test fixture, because it looked synthetic. Removed and
+  rotated; the scanner exists so the check is mechanical rather than a judgement call.
+- Workspace keys are canonicalised: the same directory arriving with forward slashes and backslashes
+  produced a false mismatch warning.
+- `recentRuns` ordered by a millisecond timestamp, so two calls in the same millisecond came back
+  arbitrarily; also never selected the `warnings` column it was writing.
+- The redactor's key matcher was a substring regex, which missed `zcodejwttoken` while matching
+  `sessionId` — both directions wrong.
+
+### Still not implemented
+
+Ten of fifteen tools refuse clearly by name: `zcode_conversation`, `zcode_files`, `zcode_command`,
+`zcode_settings`, `zcode_plugins`, `zcode_mcp`, `zcode_automation`, `zcode_usage`,
+`zcode_headless`, `zcode_protocol`.
+
 ## [0.1.0] - 2026-09-11
 
 ### Added — reverse-engineering audit
