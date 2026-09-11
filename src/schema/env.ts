@@ -32,6 +32,15 @@ const EnvSchema = z.object({
   /** Workspace used when a call omits one. */
   ZCODE_MCP_WORKSPACE: z.string().optional(),
 
+  /**
+   * Model provider to install into spawned runtimes, as "<model>" or "<provider>/<model>".
+   * Delivered to the child as ZCODE_MODEL (+ ZCODE_BASE_URL), which the agent reads as a
+   * priority-40 config layer. The credential comes from the ambient environment
+   * (ZCODE_API_KEY / ANTHROPIC_API_KEY / <PROVIDER>_API_KEY) and is never written to a file.
+   */
+  ZCODE_MCP_MODEL: z.string().optional(),
+  ZCODE_MCP_BASE_URL: z.string().optional(),
+
   ZCODE_MCP_WORK_DIR: z.string().default(path.join(packageRoot, 'work')),
   ZCODE_MCP_DB: z.string().default(path.join(packageRoot, 'data', 'audit.db')),
 

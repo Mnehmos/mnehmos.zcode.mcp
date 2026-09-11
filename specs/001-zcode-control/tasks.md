@@ -78,8 +78,8 @@ Single project: `src/`, `test/`, `tools/`, `data/`, `work/` at the repository ro
 
 ### Provider bootstrap
 
-- [ ] T027 Implement `src/zcode/settings.ts` — materialise the child model config (shape from `ZCODE_UNKNOWNS.md` U-3) and deliver it by the first working mechanism, in this order: project-level config in `<workspace>/.zcode/`, `HOME`/`USERPROFILE` redirection to a per-child dir, `--settings` (re-test with alternate argument ordering). Inject the API key through the child **environment** (`ZCODE_API_KEY` / `ANTHROPIC_API_KEY` / `<PROVIDER>_API_KEY`) and never write it to the file
-- [ ] T028 [P] Write `test/settings.test.ts` — generated config matches the documented schema; `openai-compatible` without `baseURL` is rejected; the API key is **absent** from the generated file when an env var supplies it; the chosen delivery mechanism is recorded
+- [x] T027 Implement `src/zcode/settings.ts` — **DONE, and simpler than planned.** Delivery is environment-only: `ZCODE_MODEL` + `ZCODE_BASE_URL` + `ZCODE_API_KEY` in the child (the agent's `parseEnvConfig`, priority-40 config layer). **No file is written**: the project/user config routes were tried and rejected a minimal `model` block silently. See `.re/findings_ADDENDUM.md` §A19
+- [x] T028 [P] Write `test/settings.test.ts` — **DONE.** Key-candidate order, provider normalisation, refusal shapes, the `ZCODE_BASE_URL` dual-purpose warning, and that no file path is ever produced.
 - [ ] T029 Implement `src/zcode/logtokens.ts` — obtain `logEpoch`/`revision`, issue the request, retry **once** on `proto.staleLogEpoch`/`proto.staleRevision`, then report degraded with both token sets
 - [ ] T030 [P] Write `test/logtokens.test.ts` — success path echoes tokens; one stale marker triggers exactly one retry; a second stale marker yields `ok:false` with `stale_after_retry` degraded
 
