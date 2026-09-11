@@ -1,0 +1,398 @@
+{
+ "AcknowledgePostUpdateReleaseNotes": [
+  "zcode:ack-post-update-release-notes"
+ ],
+ "ActivateOrSetWorkspace": [
+  "zcode:activate-or-set-workspace"
+ ],
+ "ApplicationLocaleChanged": [
+  "zcode:application-locale-changed"
+ ],
+ "BindRemoteWorkspaceSessionContext": [
+  "zcode:bind-remote-workspace-session-context"
+ ],
+ "BotRemoteWorkspaceReconnected": [
+  "zcode:bot-remote-workspace-reconnected"
+ ],
+ "BrowserViewAttachGuest": [
+  "zcode:browser-view-attach-guest"
+ ],
+ "BrowserViewCloseTab": [
+  "zcode:browser-view-close-tab"
+ ],
+ "BrowserViewCloseTabFromRenderer": [
+  "zcode:browser-view-close-tab-from-renderer"
+ ],
+ "BrowserViewDetachGuest": [
+  "zcode:browser-view-detach-guest"
+ ],
+ "BrowserViewEnsureResident": [
+  "zcode:browser-view-ensure-resident"
+ ],
+ "BrowserViewOperation": [
+  "zcode:browser-view-operation"
+ ],
+ "BrowserViewReady": [
+  "zcode:browser-view-ready"
+ ],
+ "BrowserViewReportResidency": [
+  "zcode:browser-view-report-residency"
+ ],
+ "BrowserViewRestore": [
+  "zcode:browser-view-restore"
+ ],
+ "BrowserViewRestoreTabs": [
+  "zcode:browser-view-restore-tabs"
+ ],
+ "BrowserViewScreenshotSurfacePrepare": [
+  "zcode:browser-view-screenshot-surface-prepare"
+ ],
+ "BrowserViewScreenshotSurfaceReady": [
+  "zcode:browser-view-screenshot-surface-ready"
+ ],
+ "BrowserViewScreenshotSurfaceRelease": [
+  "zcode:browser-view-screenshot-surface-release"
+ ],
+ "BrowserViewSuspend": [
+  "zcode:browser-view-suspend"
+ ],
+ "BrowserViewSuspendReady": [
+  "zcode:browser-view-suspend-ready"
+ ],
+ "BrowserViewUpdateViewport": [
+  "zcode:browser-view-update-viewport"
+ ],
+ "BrowserViewViewportChanged": [
+  "zcode:browser-view-viewport-changed"
+ ],
+ "BrowserViewVisibility": [
+  "zcode:browser-view-visibility"
+ ],
+ "CanOpenCommunity": [
+  "zcode:can-open-community"
+ ],
+ "CancelCuaPermissionOnboarding": [
+  "zcode:cancel-cua-permission-onboarding"
+ ],
+ "CancelPendingRemoteConnection": [
+  "zcode:cancel-pending-remote-connection"
+ ],
+ "CancelUpdateDownload": [
+  "zcode:cancel-update-download"
+ ],
+ "CaptureWindowScreenshot": [
+  "zcode:capture-window-screenshot"
+ ],
+ "ClearEmbeddedBrowserData": [
+  "zcode:clear-embedded-browser-data"
+ ],
+ "ClearFinalArmsCustomEventsE2E": [
+  "zcode:e2e:clear-final-arms-custom-events"
+ ],
+ "CloseActiveContextRequest": [
+  "zcode:close-active-context-request"
+ ],
+ "ConfigureFinalArmsCustomEventsE2E": [
+  "zcode:e2e:configure-final-arms-custom-events"
+ ],
+ "ConnectRemote": [
+  "zcode:connect-remote"
+ ],
+ "CreateTempTextAttachment": [
+  "zcode:create-temp-text-attachment"
+ ],
+ "DesktopWindowChromeStateChanged": [
+  "zcode:desktop-window-chrome-state-changed"
+ ],
+ "DesktopZoomLevelChanged": [
+  "zcode:desktop-zoom-level-changed"
+ ],
+ "DisposeRemoteSession": [
+  "zcode:dispose-remote-session"
+ ],
+ "DownloadUpdate": [
+  "zcode:download-update"
+ ],
+ "EmbeddedBrowserJavaScriptDialog": [
+  "zcode:embedded-browser-javascript-dialog"
+ ],
+ "ExecuteDesktopCommand": [
+  "zcode:execute-desktop-command"
+ ],
+ "ExportLogs": [
+  "zcode:export-logs"
+ ],
+ "FocusTab": [
+  "zcode:focus-tab"
+ ],
+ "GetApplicationIcon": [
+  "zcode:get-application-icon"
+ ],
+ "GetAutoUpdatePreferences": [
+  "zcode:get-auto-update-preferences"
+ ],
+ "GetCuaGrayEnabled": [
+  "zcode:get-cua-gray-enabled"
+ ],
+ "GetDesktopSessionActivity": [
+  "zcode:get-desktop-session-activity"
+ ],
+ "GetDesktopWindowChromeState": [
+  "zcode:get-desktop-window-chrome-state"
+ ],
+ "GetDesktopZoomLevel": [
+  "zcode:get-desktop-zoom-level"
+ ],
+ "GetDeviceId": [
+  "zcode:get-device-id"
+ ],
+ "GetInstalledEditors": [
+  "zcode:get-installed-editors"
+ ],
+ "GetProcessMetrics": [
+  "zcode:get-process-metrics"
+ ],
+ "GetRendererActionTraceConfig": [
+  "zcode:get-renderer-action-trace-config"
+ ],
+ "GetSystemLocale": [
+  "zcode:get-system-locale"
+ ],
+ "GetUpdateState": [
+  "zcode:get-update-state"
+ ],
+ "GetWebRemoteControlStatus": [
+  "zcode:get-web-remote-control-status"
+ ],
+ "GetZCodeStdioTapDevState": [
+  "zcode:get-zcode-stdio-tap-dev-state"
+ ],
+ "ImportChromeBrowserData": [
+  "zcode:import-chrome-browser-data"
+ ],
+ "IsDockerAvailable": [
+  "zcode:is-docker-available"
+ ],
+ "ListDockerContainers": [
+  "zcode:list-docker-containers"
+ ],
+ "ListSSHConfigAliases": [
+  "zcode:list-ssh-config-aliases"
+ ],
+ "ListWSLDistros": [
+  "zcode:list-wsl-distros"
+ ],
+ "LoadMcpFromUserDirectory": [
+  "zcode:load-mcp-from-user-directory"
+ ],
+ "Log": [
+  "zcode:log"
+ ],
+ "MigrateLegacyCommonMcp": [
+  "zcode:migrate-legacy-common-mcp"
+ ],
+ "NewTab": [
+  "zcode:new-tab"
+ ],
+ "NewTask": [
+  "zcode:new-task"
+ ],
+ "NotifyCuaHelperPermissionDragEnded": [
+  "zcode:notify-cua-helper-permission-drag-ended"
+ ],
+ "OAuthCallback": [
+  "zcode:oauth-callback"
+ ],
+ "OAuthCallbackHandled": [
+  "zcode:oauth-callback-handled"
+ ],
+ "OAuthRegisterState": [
+  "zcode:oauth-register-state"
+ ],
+ "OpenBrowserUrl": [
+  "zcode:open-browser-url"
+ ],
+ "OpenCuaPermissionOnboarding": [
+  "zcode:open-cua-permission-onboarding"
+ ],
+ "OpenExternal": [
+  "zcode:open-external"
+ ],
+ "OpenFeedbackDialog": [
+  "zcode:open-feedback-dialog"
+ ],
+ "OpenInEditor": [
+  "zcode:open-in-editor"
+ ],
+ "OpenInFileManager": [
+  "zcode:open-in-file-manager"
+ ],
+ "OpenProcessMonitor": [
+  "zcode:open-process-monitor"
+ ],
+ "OpenTicketsPanel": [
+  "zcode:open-tickets-panel"
+ ],
+ "OpenUpdateStatusWindow": [
+  "zcode:open-update-status-window"
+ ],
+ "OpenWorkspace": [
+  "zcode:open-workspace"
+ ],
+ "OpenWorkspacePath": [
+  "zcode:open-workspace-path"
+ ],
+ "PaymentCallback": [
+  "zcode:payment-callback"
+ ],
+ "PostUpdateReleaseNotes": [
+  "zcode:post-update-release-notes"
+ ],
+ "PrepareCuaHelperPermissionDrag": [
+  "zcode:prepare-cua-helper-permission-drag"
+ ],
+ "PrintToPdf": [
+  "zcode:print-to-pdf"
+ ],
+ "QuitAndInstallUpdate": [
+  "zcode:quit-and-install-update"
+ ],
+ "ReadFinalArmsCustomEventsE2E": [
+  "zcode:e2e:read-final-arms-custom-events"
+ ],
+ "RemoteConnectionLog": [
+  "zcode:remote-connection-log"
+ ],
+ "RemoteSessionClosed": [
+  "zcode:remote-session-closed"
+ ],
+ "RendererActionTraceConfigChanged": [
+  "zcode:renderer-action-trace-config-changed"
+ ],
+ "RendererReady": [
+  "zcode:renderer-ready"
+ ],
+ "ReportArmsCustomEvent": [
+  "zcode:report-arms-custom-event"
+ ],
+ "ReportRendererActionTraceBatch": [
+  "zcode:report-renderer-action-trace-batch"
+ ],
+ "ReportTelemetryEvent": [
+  "zcode:report-telemetry-event"
+ ],
+ "ResetWebRemoteControlPairing": [
+  "zcode:reset-web-remote-control-pairing"
+ ],
+ "SaveFile": [
+  "zcode:save-file"
+ ],
+ "SaveMcpToUserDirectory": [
+  "zcode:save-mcp-to-user-directory"
+ ],
+ "ScopedServicePort": [
+  "zcode:scoped-service-port"
+ ],
+ "ScopedServicePortReady": [
+  "zcode:scoped-service-port-ready"
+ ],
+ "SelectDirectory": [
+  "zcode:select-directory"
+ ],
+ "SelectFile": [
+  "zcode:select-file"
+ ],
+ "SelectFiles": [
+  "zcode:select-files"
+ ],
+ "ServicePort": [
+  "zcode:service-port"
+ ],
+ "SetApplicationLocale": [
+  "zcode:set-application-locale"
+ ],
+ "SetAutoDownloadAndInstallUpdates": [
+  "zcode:set-auto-download-and-install-updates"
+ ],
+ "SetTitleBarTheme": [
+  "zcode:set-title-bar-theme"
+ ],
+ "SettingsChanged": [
+  "zcode:settings-changed"
+ ],
+ "ShowTaskNotification": [
+  "zcode:show-task-notification"
+ ],
+ "SkipUpdateVersion": [
+  "zcode:skip-update-version"
+ ],
+ "StartCuaHelperPermissionDrag": [
+  "zcode:start-cua-helper-permission-drag"
+ ],
+ "StartPerformanceTrace": [
+  "zcode:perf:start"
+ ],
+ "StartWebRemoteControl": [
+  "zcode:start-web-remote-control"
+ ],
+ "StopPerformanceTrace": [
+  "zcode:perf:stop"
+ ],
+ "StopWebRemoteControl": [
+  "zcode:stop-web-remote-control"
+ ],
+ "SyncActiveTaskSession": [
+  "zcode:sync-active-task-session"
+ ],
+ "SyncAppSettings": [
+  "zcode:sync-app-settings"
+ ],
+ "SyncTelemetryContext": [
+  "zcode:sync-telemetry-context"
+ ],
+ "SyncWebRemoteControlTasks": [
+  "zcode:sync-web-remote-control-tasks"
+ ],
+ "SyncWebRemoteControlWorkspaces": [
+  "zcode:sync-web-remote-control-workspaces"
+ ],
+ "SyncWindowTabs": [
+  "zcode:sync-window-tabs"
+ ],
+ "SyncWindowUnreadCount": [
+  "zcode:sync-window-unread-count"
+ ],
+ "TaskNotificationClick": [
+  "zcode:task-notification-click"
+ ],
+ "TaskNotificationSound": [
+  "zcode:task-notification-sound"
+ ],
+ "UpdateCheckResult": [
+  "zcode:update-check-result"
+ ],
+ "UpdateReady": [
+  "zcode:update-ready"
+ ],
+ "UpdateStateChanged": [
+  "zcode:update-state-changed"
+ ],
+ "WebRemoteControlReconnectWorkspace": [
+  "zcode:web-remote-control-reconnect-workspace"
+ ],
+ "WebRemoteControlStatusChanged": [
+  "zcode:web-remote-control-status-changed"
+ ],
+ "WindowControlsOverlayChanged": [
+  "zcode:window-controls-overlay-changed"
+ ],
+ "WindowControlsOverlayReady": [
+  "zcode:window-controls-overlay-ready"
+ ],
+ "WindowFullscreenChanged": [
+  "zcode:window-fullscreen-changed"
+ ],
+ "value": [
+  "zcode-agent"
+ ]
+}

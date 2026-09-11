@@ -1,0 +1,48 @@
+# ─── Build output ──────────────────────────────────────────────────────────────
+dist/
+node_modules/
+
+# ─── Generated at runtime ──────────────────────────────────────────────────────
+work/
+data/audit.db
+data/audit.db-*
+data/*.db
+data/*.db-*
+
+# ─── ZCode artifacts: MUST NEVER BE COMMITTED ─────────────────────────────────
+# Extracted ZCode bundles (out/main, out/preload, out/host, chunks) are
+# third-party copyrighted code. Regenerate locally with .re/asar.py.
+.re/x/
+
+# Copies of the live ZCode SQLite databases. These contain the user's entire
+# agent conversation history (messages, parts, tool output) and task index.
+# Never commit, never share, delete when done analysing.
+.re/dbcopy/
+
+# Generated listings and scratch extraction output
+.re/asar_paths.txt
+.re/__pycache__/
+.re/tools/
+.re/probe/
+.re/_*.txt
+
+# ─── Secrets: never commit ────────────────────────────────────────────────────
+*.env
+.env
+.env.*
+!.env.example
+*credentials*.json
+*settings*.bak*
+work/settings/
+
+# ─── Unrelated sibling content ────────────────────────────────────────────────
+.video_agent/
+
+# ─── Editor / OS ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# Local-only notes: cipher internals deliberately excluded from the public repo
+.re/LOCAL_ONLY_*

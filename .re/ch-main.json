@@ -1,0 +1,64 @@
+{
+ "agentSource": [
+  "zcodeAgent"
+ ],
+ "appId": [
+  "zcode"
+ ],
+ "authorizeUrl": [
+  "https://bigmodel.cn/login"
+ ],
+ "baseURL": [
+  "http://192.168.6.166:8080",
+  "https://open.bigmodel.cn/api/anthropic"
+ ],
+ "directorySource": [
+  "zcode"
+ ],
+ "domestic": [
+  "https://cdn.codegeex.cn/zcode/electron/releases"
+ ],
+ "elementName": [
+  "app_daily_active",
+  "app_launch"
+ ],
+ "error": [
+  "app is shutting down"
+ ],
+ "eventRegion": [
+  "app"
+ ],
+ "metric_kind": [
+  "zcode_data_bytes"
+ ],
+ "operation": [
+  "appendFile"
+ ],
+ "overseas": [
+  "https://cdn.zcode-ai.com/zcode/electron/releases"
+ ],
+ "provider": [
+  "zcode-cua-helper"
+ ],
+ "redirectUri": [
+  "zcode://oauth/callback"
+ ],
+ "serviceName": [
+  "zcode-cron-scheduler"
+ ],
+ "source": [
+  "zcodeagentmcp"
+ ],
+ "tokenUrl": [
+  "https://zcode.z.ai/api/v1/oauth/token"
+ ],
+ "viewer": [
+  "chrome://tracing"
+ ],
+ "worldName": [
+  "zcode-playwright-helper"
+ ],
+ "zcode_type": [
+  "app-error"
+ ]
+}

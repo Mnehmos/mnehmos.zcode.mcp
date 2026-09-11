@@ -1,0 +1,107 @@
+{
+ "agentId": [
+  "zcode"
+ ],
+ "agentSource": [
+  "zcodeAgent"
+ ],
+ "appId": [
+  "zcode"
+ ],
+ "authorizeUrl": [
+  "https://bigmodel.cn/login",
+  "https://chat.z.ai/api/oauth/authorize"
+ ],
+ "baseURL": [
+  "http://192.168.6.166:8080",
+  "https://open.bigmodel.cn/api/anthropic"
+ ],
+ "businessLoginUrl": [
+  "https://api.z.ai/api/auth/z/login"
+ ],
+ "callback_data": [
+  "zc:cancel"
+ ],
+ "commands": [
+  "app-memory:global-commands"
+ ],
+ "directorySource": [
+  "zcode"
+ ],
+ "event": [
+  "zcode.task.streaming_tool_input.projected",
+  "zcode_agent.runtime_preferences.host_request_dispatched",
+  "zcode_agent.runtime_preferences.host_response_received",
+  "zcode_agent.runtime_preferences.host_response_timeout",
+  "zcode_agent.runtime_preferences.response_without_pending",
+  "zcode_protocol.runtime_preferences.host_request_received",
+  "zcode_task.snapshot.live_tool_projection.merged"
+ ],
+ "hooks": [
+  "app-memory:global-hooks"
+ ],
+ "id": [
+  "env:bigmodel-usage"
+ ],
+ "identity": [
+  "zcode-owner"
+ ],
+ "instructions": [
+  "app-memory:global-instructions"
+ ],
+ "mcp": [
+  "app-memory:global-mcp"
+ ],
+ "memory": [
+  "app-memory:global-memory"
+ ],
+ "mimeType": [
+  "application/octet-stream"
+ ],
+ "path": [
+  "built-in:Explore",
+  "built-in:general-purpose"
+ ],
+ "plugins": [
+  "app-memory:global-plugins"
+ ],
+ "provider": [
+  "zcode-cua-helper",
+  "zcode-desktop-iab"
+ ],
+ "redirectUri": [
+  "zcode://oauth/callback"
+ ],
+ "settingsBehavior": [
+  "app-memory:global-settings"
+ ],
+ "skills": [
+  "app-memory:global-skills"
+ ],
+ "source": [
+  "zcode",
+  "zcodeagentmcp"
+ ],
+ "subagents": [
+  "app-memory:global-subagents"
+ ],
+ "target": [
+  "zcode-agent"
+ ],
+ "tokenUrl": [
+  "https://zcode.z.ai/api/v1/oauth/token"
+ ],
+ "type": [
+  "application/octet-stream",
+  "approve",
+  "zcode.bot.elicitation_request",
+  "zcode.bot.message",
+  "zcode.bot.test"
+ ],
+ "userinfoUrl": [
+  "https://chat.z.ai/api/oauth/userinfo"
+ ],
+ "value": [
+  "approve"
+ ]
+}
