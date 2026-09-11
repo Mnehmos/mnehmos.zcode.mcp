@@ -2,10 +2,13 @@
 
 An MCP server that controls **ZCode** (the Z.ai / Zhipu desktop AI coding agent) programmatically.
 
-> **Status: specification complete, implementation not started.**
-> This repository currently contains (a) a full reverse-engineering audit of ZCode Desktop 3.11.2 and
-> (b) the Spec Kit specification, plan, contracts and task list for the server. Start with
-> `specs/001-zcode-control/quickstart.md`, then `tasks.md`.
+> **Status: working.** All 15 tools are implemented and dispatch through the MCP protocol, and a
+> real agent turn runs end to end — one `zcode_chat` call creates a session, sends the prompt, and
+> returns the answer. Two capabilities are **declared limitations** rather than bugs, because a bare
+> agent runtime is a subset of what the desktop can do (see *Capability boundaries* below).
+>
+> Start with `specs/001-zcode-control/quickstart.md`. The audit is in `ZCODE_*.md`; corrections from
+> a second pass are in `.re/findings_ADDENDUM.md`, which wins where they disagree.
 
 ---
 
@@ -84,24 +87,42 @@ specs/001-zcode-control/
 14 tools with discriminated-union actions — deliberately not one tool per operation, because the model
 provider rejects requests above roughly 89–94 registered tools.
 
-| Tool | Actions | Read-only? | Rating |
+| Tool | Actions | Read-only? | Status |
 |---|---|---|---|
-| `zcode_status` | `runtimes`, `workspace`, `sessions`, `probe`, `doctor`, `runs` | ✅ | A |
-| `zcode_session` | `list`, `get`, `create`, `resume`, `close`, `fork`, `compact`, `set_model`, `set_mode`, `set_thought_level`, `goal`, `subagents`, `usage` | mixed | A |
-| `zcode_chat` ★ | `send`, `steer`, `stop`, `cancel_background`, `wait` | ❌ | A |
-| `zcode_conversation` | `rows`, `messages`, `events`, `plans`, `usage` | ✅ | B |
-| `zcode_files` | `changes`, `rewind_preview`, `rewind_apply`, `read_attachment`, `put_attachment` | mostly | B |
-| `zcode_command` | `catalog`, `query`, `execute` | mixed | A |
-| `zcode_settings` | `read_state`, `get`, `set_desktop`, `set_default_*`, `update_*_prefs`, `upsert_provider`, `remove_provider`, `update_provider_registry`, `hook_trust_grant` | mixed | A/B |
-| `zcode_plugins` | `list`, `overview`, `describe`, `set_enabled`, `configure`, `reset_config`, `validate`, `install`, `update`, `uninstall`, `marketplace`, `cancel_operation` | mixed | A/B |
-| `zcode_mcp` | `list`, `status`, `servers`, `add_server`, `remove_server` | mixed | A/B |
-| `zcode_automation` | `list`, `create`, `update`, `delete`, `check_binding` | mixed | A |
-| `zcode_usage` | `stats` | ✅ | A |
-| `zcode_approval` | `policy`, `list`, `respond` | mixed | B |
-| `zcode_headless` | `prompt` | ❌ | A |
-| `zcode_protocol` | `methods`, `call` | gated | C |
+| `zcode_status` | `runtimes`, `workspace`, `sessions`, `probe`, `doctor`, `runs` | ✅ | works |
+| `zcode_session` | `list`, `get`, `create`, `resume`, `close`, `fork`, `compact`, `set_model`, `set_mode`, `set_thought_level`, `goal`, `subagents`, `usage` | mixed | works |
+| `zcode_chat` ★ | `send`, `steer`, `stop`, `cancel_background`, `wait` | ❌ | works |
+| `zcode_models` | `catalog`, `available`, `current`, `select` | mixed | works |
+| `zcode_approval` | `policy`, `list`, `respond` | mixed | works |
+| `zcode_usage` | `stats` | ✅ | works |
+| `zcode_conversation` | `rows`, `messages`, `events`, `plans`, `usage` | ✅ | works |
+| `zcode_plugins` | `list`, `overview`, `describe`, `validate`, `set_enabled`, `configure`, `reset_config`, `install`, `update`, `uninstall`, `marketplace`, `cancel_operation` | mixed | works |
+| `zcode_mcp` | `list`, `status`, `servers`, `add_server`, `remove_server` | mixed | works |
+| `zcode_settings` | `read_state`, `get`, `set_desktop`, `set_default_*`, `update_*_prefs`, provider actions, `hook_trust_grant` | mixed | works |
+| `zcode_protocol` | `methods`, `call` | mixed | works, gated |
+| `zcode_headless` | `prompt` | ❌ | works |
+| `zcode_automation` | `list`, `create`, `update`, `delete`, `check_binding` | mixed | **declared limitation** |
+| `zcode_files` | `changes`, `rewind_preview`, `rewind_apply`, `read_attachment`, `put_attachment` | mostly | partial — see below |
 
 ★ = the P1 journey. Everything else is prerequisite plumbing or convenience.
+
+## Capability boundaries
+
+An owned agent runtime is a **subset** of what the desktop can do. Two capabilities resolve to
+methods that exist in the protocol's vocabulary but need a host tier that is not present:
+
+- **`zcode_automation`** — `automation/*` answers `-32601`. Scheduling appears to be a host-side
+  capability; the desktop's host provides it and its client inherits it. Reported as
+  `method_not_supported: unreliable`.
+- **`zcode_files changes` / `rewind_preview`** — `v4/conversation/fileChanges` requires a
+  `baseRevision` that no call exposes to a bare runtime's client. `baseLogEpoch` **is** obtainable
+  (from `rowsRange.atLogEpoch`, confirmed because a wrong epoch is rejected) but every derivable
+  revision is rejected with `proto.staleRevision`. Reported as `token_unobtainable: unreliable`.
+
+The rest of `zcode_files` works, including `rewind_apply`, which is implemented as a **fork** — the
+safe form, since it keeps the pre-rewind state reachable.
+
+Both are recorded in `.re/findings_ADDENDUM.md` §A22 and §A23, with the full evidence.
 
 ### Non-capabilities, stated plainly
 
