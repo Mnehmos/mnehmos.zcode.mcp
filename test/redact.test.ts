@@ -13,7 +13,7 @@ const FAKE = {
   openrouter: 'sk-or-v1-abcdef0123456789abcdef0123456789',
   jwt: 'eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiYWJjIn0.c2lnbmF0dXJlLXBhcnQ',
   bearer: 'Bearer abcdefghijklmnopqrstuvwxyz123456',
-  providerKey: '58ddd320f7ec4f7298786dc6d7566a4c.juSiut1H4c06rGA5',
+  providerKey: '0123456789abcdef0123456789abcdef.AAAAAAAAAAAAAAAA', // shape only, not a credential
   aws: 'AKIAIOSFODNN7EXAMPLE',
 };
 
