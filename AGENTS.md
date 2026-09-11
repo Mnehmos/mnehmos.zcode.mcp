@@ -100,6 +100,37 @@ specs/001-zcode-control/         spec → plan → research → data-model → c
 5. If the action mutates, extend the opt-in integration suite and prove the read-back.
 6. Update the tool table in `README.md`.
 
+## Git flow
+
+`main` is release-only and always green. `develop` is the integration branch.
+Work happens on short-lived branches off `develop`.
+
+```
+main      ●────────────●──────────────●        tags only, no direct commits
+           \          / \            /
+develop     ●──●──●──●────●──●──●───●          integration, always building
+             \    /      \    /
+feature/*     ●──●          ●──●               one concern, merged when its gate passes
+```
+
+| Branch | From | Merges into | Purpose |
+|---|---|---|---|
+| `feature/<task-id>-<slug>` | `develop` | `develop` | one task or a small cluster from `tasks.md` |
+| `release/<version>` | `develop` | `main` **and** `develop` | stabilise, bump version, update CHANGELOG |
+| `hotfix/<slug>` | `main` | `main` **and** `develop` | fix a shipped release |
+
+Rules:
+
+1. **Never commit to `main` directly.** A release is merged from `release/*` and tagged.
+2. **Name feature branches after the task id** from `specs/001-zcode-control/tasks.md`, so the
+   branch, the commit and the task list stay legible together — e.g. `feature/T015-transport`.
+3. **A merge needs its gate.** For a feature branch that is the relevant gate in the table below;
+   for a release branch it is the full gate set plus `ZCODE_MCP_IT=1`.
+4. **Tag releases with an annotated tag** and write real release notes: what changed, what was
+   verified, what is still unproven. `CHANGELOG.md` and the tag must agree.
+5. **Merge `release/*` back into `develop`.** A fix that only lands on `main` will be undone by the
+   next release.
+
 ## Gates (all must pass before you call anything done)
 
 ```sh
