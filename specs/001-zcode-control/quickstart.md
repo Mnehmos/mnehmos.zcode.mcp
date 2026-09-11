@@ -65,49 +65,37 @@ If that works, the control plane is real. Everything below is plumbing.
 A bare runtime has **no** credentials and reports
 `model: {current: {modelId: "missing-model", providerId: "zcode-unconfigured"}}`.
 
-The agent takes its model config from the top-level `model` key of its settings file
-(`~/.zcode/cli/config.json` by default, or a project-level config which wins):
-
-```jsonc
-{
-  "model": {
-    "main": {
-      "provider": "my-provider",
-      "model": "my-model-id",
-      "kind": "anthropic",                       // or "openai" / "openai-compatible"
-      "baseURL": "https://api.example.com/v1",
-      "apiKeyRequired": true
-    }
-  }
-}
-```
-
-**Do not put the key in the file.** Supply it by environment — the runtime checks, in order:
-
-```
-OPENAI_API_KEY  →  ANTHROPIC_API_KEY  →  <PROVIDERNAME>_API_KEY  →  <PROVIDER>_API_KEY  →  ZCODE_API_KEY
-```
+The fix is **three environment variables** — no file, no editing ZCode's config:
 
 ```sh
-export ZCODE_API_KEY=...        # always honoured, last resort
-export ANTHROPIC_API_KEY=...    # when kind resolves to anthropic
+export ZCODE_MODEL="<model>"                 # or "<provider>/<model>"
+export ZCODE_BASE_URL="https://api.example.com/v1"   # see the hazard below
+export ZCODE_API_KEY="..."                   # or ANTHROPIC_API_KEY / <PROVIDER>_API_KEY
 ```
 
-Verify the provider took effect:
+The agent reads these as a config layer at priority 40 (`parseEnvConfig`), which outranks both the
+project and user config files.
+
+Verify it took effect — the sentinel must be gone:
 
 ```sh
-printf '{"id":1,"method":"workspace/readState","params":{"workspace":{"workspacePath":"%s","workspaceKey":"%s"}}}\n' "$PWD" "$PWD" \
-  | node "E:/zcode/resources/glm/zcode.cjs" app-server --stdio
+printf '{"id":1,"method":"workspace/readState","params":{"workspace":{"workspacePath":"%s","workspaceKey":"%s"}}}
+' "$PWD" "$PWD"   | node "<install>/resources/glm/zcode.cjs" app-server --stdio | head -c 400
 ```
 
-Success looks like a **non-empty** `modelCatalog.available` and a `model.current.modelId` that is not
-`missing-model`.
+Success looks like `model.current.modelId` being your model (not `missing-model`) and a **non-empty**
+`modelCatalog.available`.
 
-**Manual fallback** if generated config delivery turns out to be unreliable: edit
-`~/.zcode/cli/config.json` by hand, adding the `model` block above, and skip the MCP's provider
-bootstrap entirely. Nothing else in the design depends on the bootstrap succeeding.
+### Two things to know
 
----
+⚠ **`ZCODE_BASE_URL` is dual-purpose.** The same variable is read by ZCode's endpoint resolver as the
+control-plane origin (OAuth, plan, telemetry) *and* by the model-config parser as the model base URL.
+For a local agent runtime the control-plane origin is unused, so this is safe in practice — but do not
+point it at an endpoint you would not also accept as the API origin.
+
+⚠ **This path pins the provider kind to `anthropic`.** A genuinely `openai-compatible` provider cannot
+be expressed this way. If you need one, configure it yourself in `~/.zcode/cli/config.json` — see
+`ZCODE_UNKNOWNS.md` U-3 for the shape and the caveat that a minimal block was rejected in testing.
 
 ## 4. Build and verify
 
@@ -145,21 +133,33 @@ Expect `ok:true`, `result.version` = the runtime version, `result.protocol` =
 ```
 Expect real sessions, real token figures, and a server list. No turn has run.
 
-### Step 3 — a non-mutating turn (the P1 acceptance test)
+### Step 3 — a real turn (the P1 acceptance test) — **now passing**
 
 ```jsonc
 { "tool": "zcode_chat",
   "arguments": {
-    "action": "send",
-    "session_id": "sess_…",
     "text": "List the top-level files and summarise the project in two sentences.",
-    "tool_allowlist": ["Read", "Glob", "Grep"],
-    "idempotency_key": "quickstart-1"
+    "tool_denylist": ["Write", "Edit", "ApplyPatch"]
   } }
 ```
-Expect `ok:true`, `result.turn.outcome === "completed"`, non-empty `result.text`, and
-`result.turn.tool_calls.denied === 0`. `tool_allowlist` here makes the turn *incapable* of writing —
-this is the safest possible first real call.
+
+**Omit `session_id`.** That is not laziness: with no session, the runtime's own `createSession`
+command is used, which writes the session record and admits the first input in one ordered
+operation. Sending to a freshly created session as a separate step fails its foreign key, because
+the row does not exist until the session is first used (`.re/findings_ADDENDUM.md` A21).
+
+Observed result:
+
+```json
+{"ok": true,
+ "result": {"status": "accepted", "session_id": "sess_…", "created": true,
+            "turn": {"turn_id": "turn_…", "outcome": "completed", "result_type": "success",
+                     "tool_calls": {"total": 0, "denied": 0, "failed": 0}},
+            "text": "…"}}
+```
+
+`result_type` comes from the runtime's own terminal event and distinguishes a completed turn from a
+cancellation (`cancelled`) or a budget stop (`error_max_turns`, `error_max_budget`).
 
 ### Step 4 — prove the honesty rule
 

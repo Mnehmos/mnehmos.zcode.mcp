@@ -531,8 +531,10 @@ Found while checking whether ZCode supports a terminal mode. It does — it alwa
 **Evidence.** Running `tui` from the desktop bundle:
 
 ```
-$ node E:\zcodeesources\glm\zcode.cjs tui
-Error: Cannot find package '@zcode/tui' imported from E:\zcodeesources\glm\zcode.cjs
+$ node E:\zcode
+esources\glm\zcode.cjs tui
+Error: Cannot find package '@zcode/tui' imported from E:\zcode
+esources\glm\zcode.cjs
 ```
 
 And the loader that produces it (`eyn`, "loadTuiRuntime"):
@@ -573,3 +575,277 @@ return await import(pathToFileURL(join(t, "node_modules/@zcode/tui/dist/index.js
 and is the one subcommand the desktop build is built to run. This is recorded because it changes what
 we may claim about the CLI surface, and because anyone reaching for `--output-format`/`--mode` should
 know they are exercising the *CLI* contract, not the desktop runtime's.
+
+---
+
+## A19. ✅ Provider bootstrap is ENVIRONMENT-ONLY — and the file path does not work
+
+**RESOLVES the delivery question left open by A14**, and corrects the plan, which specified writing a
+generated settings file.
+
+### What was tried first, and why it failed
+
+A14 concluded the project config layer (priority 20) was the delivery mechanism. It is a real layer —
+`L_r()` really does probe `zcode.json` and `.zcode/config.json` up the ancestor chain, and `_5o()`
+really does set `loaded:true` when it finds them — but **a minimal `model` block is not accepted**:
+
+| Attempt | Result |
+|---|---|
+| `<workspace>/.zcode/config.json` with `{model:{main:{provider,model,kind,baseURL,apiKey}}}` | `Model config is missing` |
+| `<workspace>/zcode.json`, same shape | `Model config is missing` |
+| `~/.zcode/cli/config.json` (user layer), same shape | `Model config is missing` |
+| Full default config (`Va`) **plus** `model.main` | `Model config is missing` |
+| **`ZCODE_MODEL` + `ZCODE_BASE_URL` + `ZCODE_API_KEY` in the environment** | **provider consumed** |
+
+The likely cause is that the config is validated by a strict zod schema (`bRn.parse`, applied via
+`qj()`), and the file loaders take a fallback path when validation fails — silently, with only a
+structured warning through `adapters.config`. A configuration mechanism that fails silently is not one
+to build a server on.
+
+### The mechanism that works
+
+`function gxe(env, {prefix = "ZCODE_"})` — "parseEnvConfig" — builds a whole config layer from the
+environment (`wc.Env`, priority **40**, above project and user):
+
+```js
+const zRo="ZCODE_", A_r="MODEL", URo="BASE_URL";
+function WRo(env, prefix) {                       // parseEnvModelTarget
+  const r = readNonEmptyEnv(env, prefix + MODEL); // ZCODE_MODEL
+  if (!r) return;
+  const n = parseModelRef(r, { defaultProviderId: "anthropic" });
+  const o = { kind: "anthropic", model: n.modelId, provider: n.providerId };
+  const i = readNonEmptyEnv(env, prefix + BASE_URL);   // ZCODE_BASE_URL
+  i && (o.baseURL = i);
+  return o;                                       // -> config.model.main
+}
+// and the same function reads, at this precedence:
+//   ZCODE_STORAGE_DIR, ZCODE_SESSION_DB_PATH|ZCODE_SESSION_DB, ZCODE_HTTP_PROXY,
+//   ZCODE_NO_PROXY, ZCODE_AGENT_CA_CERT, ZCODE_HTTP_TIMEOUT|ZCODE_TIMEOUT,
+//   ZCODE_LOG_FORMAT, ZCODE_MAX_TOOL_CONCURRENCY
+```
+
+So: **`ZCODE_MODEL` ("`<model>`" or "`<provider>/<model>`") + `ZCODE_BASE_URL` + `ZCODE_API_KEY`**,
+all in the child's environment.
+
+### Proof (CONFIRMED, and it cost nothing)
+
+```
+no-env    model.current = {"modelId":"missing-model","providerId":"zcode-unconfigured"}  catalog.available = 0
+with-env  model.current = {"modelId":"probe-model","providerId":"mcp-probe"}             catalog.available = 1
+```
+
+Two independent confirmations:
+1. **Headless**: with `ZCODE_MODEL` set, `zcode --prompt` stops saying *"Model config is missing"* and
+   instead fails at `APICallError: getaddrinfo ENOTFOUND example.invalid` — the config was consumed
+   and the call was attempted. Without it, the original error stands.
+2. **Protocol**: a spawned `app-server` reports the injected model in `workspace/readState`, and
+   `modelCatalog.available` goes from 0 to 1.
+
+No credential was used and no model call was made (the base URL is unresolvable on purpose), so
+proving M2 spends nothing.
+
+### Consequences
+
+1. **`src/zcode/settings.ts` writes no files.** The earlier design wrote
+   `<workspace>/.zcode/config.json` — polluting a user's working tree to configure a process we own,
+   and *not working anyway*. Environment-first is cleaner, more honest, and the only version that
+   functions. Constitution Articles IV and VII are satisfied trivially.
+2. **`kind` is pinned to `anthropic`** on this path (`WRo` hardcodes it). A provider that is genuinely
+   `openai-compatible` cannot be expressed through the environment; such a user must configure their
+   own file. `settings.ts` reports this rather than mangling the value.
+3. **`ZCODE_BASE_URL` is dual-purpose** — the same variable is read by `q2()` as the ZCode
+   control-plane endpoint origin (OAuth, plan, telemetry) *and* by `WRo` as the model base URL. For a
+   local agent runtime the control-plane origin is unused, but the collision is a genuine hazard and
+   `settings.ts` emits an `advisory` warning whenever it sets it.
+4. **`ZCODE_MODEL` will only take effect in a runtime that has no higher-priority model config.** A
+   user who has configured `model.main` in a config layer above priority 40 would be overriding
+   themselves; `settings.ts` therefore checks for an existing file-sourced provider first and stays
+   out of the way.
+
+---
+
+## A20. Provider bootstrap works; `session/create` does not persist (M4 blocked)
+
+Found while bringing the MCP up against a real DeepSeek provider. Two findings, one good and one
+that blocks the first real turn.
+
+### A20.1 The environment bootstrap is now proven against a live provider ✅
+
+With `.env` supplying `ZCODE_MODEL` / `ZCODE_BASE_URL` / `ZCODE_API_KEY`, a spawned runtime reports:
+
+```
+model.current = {"modelId":"deepseek-v4.1-flash-expires-on-0910","providerId":"deepseek"}
+```
+
+no `missing-model` sentinel, `modelCatalog.available` non-empty, and `session/create` accepts the
+session. So §A19 is confirmed end to end, not just against an unresolvable host.
+
+**DeepSeek speaks the Anthropic wire format** at `https://api.deepseek.com/anthropic`, which matters
+because the env path pins `kind` to `anthropic` (§A19). That is what lets one env mechanism cover
+z.ai, OpenRouter *and* DeepSeek — without it, DeepSeek's `openai-compatible` kind would have been
+inexpressible through the environment.
+
+### A20.2 🔴 `session/create` returns a session but never writes the `session` row
+
+CONFIRMED by isolation:
+
+| Attempt | Result |
+|---|---|
+| `session/create` with **no** model configured | `-32603 Model config is missing` — a model config is REQUIRED to create a session at all |
+| `session/create` with a model configured | returns a full session snapshot with an id, and `session/list` shows it |
+| the same id in `~/.zcode/cli/db/db.sqlite` | **absent** |
+
+So the session exists in the runtime's memory and in listings, but has no database row. The
+consequence is the next step:
+
+```
+v4/command -> {"status":"failed","reasonCode":"fault.command.executionFailed",
+               "message":"FOREIGN KEY constraint failed"}
+```
+
+and the runtime's own log names the operation:
+
+```
+event: session.model_selection.persist_failed | module: bootstrap
+msg:   Session model selection persistence failed
+error: FOREIGN KEY constraint failed
+```
+
+**Mechanism.** The only table with both a `session` foreign key and a model-selection event type is
+`session_entry` (`session_entry.session_id -> session.id ON DELETE CASCADE`; the audited event types
+include `runtime/model_selection`). The runtime writes the session's model selection into
+`session_entry` before the `session` row exists, so the insert violates the constraint, the v4
+command fails, and no turn can run.
+
+**Passing `persistence: "immediate"` does not change it.** The field is real — the runtime's own
+validator says it accepts exactly `"immediate" | "deferred"` — but it does not make the create
+synchronous. **`workspaceKey` IS required** (omitting it is `-32602`), so the param shape is right.
+
+**This is not a defect in the MCP.** The client sent valid params, the runtime accepted them, and the
+failure is reported faithfully with ZCode's own reason code — which is the honesty rule working.
+Two further observations support "ZCode-side":
+
+- a stray session created earlier (`sess_52f1146d`, `directory: C:\`, `project_id: proj_c`) IS
+  persisted, so creation *can* persist — just not through this path on this build;
+- sending a turn to a session that exists in the DB but belongs to a different workspace returns
+  `{"status":"rejected","reasonCode":"proto.sessionNotFound"}`, confirming sessions are scoped to the
+  resident workspace pool rather than to the database alone.
+
+**Next experiment.** The FK is on `session_entry`, so the question is what makes `session/create`
+write the row. Candidates, cheapest first: (a) supply a caller-generated `sessionId` (the audited
+param list includes it, suggesting the caller may be expected to mint it); (b) check whether the
+desktop's own create path sets a field the protocol path does not; (c) watch the wire while the
+desktop creates a session in the same workspace and diff the params against ours.
+
+### A20.3 Also learned
+
+| Fact | Detail |
+|---|---|
+| `session/create` requires a model config | without one it is `-32603 Model config is missing`, so a provider must be configured before any session work |
+| `v4/command` failure vocabulary | `failed` + `fault.command.executionFailed`; `rejected` + `proto.sessionNotFound`; earlier: `noop`, `stale`, `duplicate` — five distinct non-success outcomes the client must not collapse |
+| `-32022` on a raw client | the runtime's `session/requestRuntimePreferences` **client request** timing out because nothing answered it — proof that the policy module is load-bearing, observed from the other side |
+| Workspace keys need canonicalising | the same directory arriving with forward slashes (`.env`) and backslashes (ZCode) produced a false key-mismatch warning until `path.resolve` was applied to the path component |
+| The install model catalogue is nested | `endpoints: {baseURL, paths: {anthropic, openai-compatible}}`, unlike the flattened vendored copy. Reading it through the flat interface silently yielded `baseURL: undefined`, which looks like "this provider has no endpoint" rather than "we parsed it wrong" |
+
+---
+
+## A21. ✅ M4 REACHED — and A20 was OUR misuse, not a ZCode bug. Two separate mistakes.
+
+**A turn ran to completion against DeepSeek.** Full trace from the runtime's own log:
+
+```
+18:53:16  zcode_protocol.session_create.started
+18:53:18  zcode_protocol.session_create.completed
+18:53:18  core.runtime::session.persistence.started     <- the session row IS written
+18:53:18  core.runtime::session.persistence.completed
+18:53:18  turn.phase  context_initialization -> session_start_hooks
+18:53:18  turn.started
+18:53:18  turn.phase  session_persistence -> target_read -> turn_started_event
+18:53:19  turn.phase  regular_turn_loop
+18:53:21  adapters.model::model.request.completed        <- a real model call
+18:53:24  adapters.model::model.sdk.stream.completed     <- streaming
+18:53:25  core.runtime::turn.completed                   <- TERMINAL
+```
+
+Row in `db.sqlite`: `sess_61b0a02f-…`, `project_id: proj_f-github-mcp-mnehmos.zcode.mcp`,
+`title: "Reply with M4-OK"`, `session_input` row `kind=sendText delivery=startNow status=promoted`.
+
+### Mistake 1 — the wrong create path
+
+`session/create` followed by a separate `sendText` is **not** how the platform creates a session. The
+platform's own path is a single command:
+
+```js
+// v4 createSession payload
+{ workspaceId, firstInput: { text }, config?, mcpServers? }
+```
+
+and its handler does the two steps **in order and atomically**:
+
+```js
+let {sessionId: n} = await e.createSessionRecord({workspaceId: r.workspaceId, mcpServers: r.mcpServers});
+if (r.config) { … apply config … }
+if (r.firstInput) { … admitInputCommand(t, n, …) … }
+```
+
+Splitting them is what broke the order: my `sendText` admitted input into a session whose row did not
+exist yet, so `session_input.session_id -> session.id` failed.
+
+### Mistake 2 — no subscription, so no events
+
+The turn above completed at 18:53:25, inside my probe's 120 s window, and my probe still reported
+"no terminal turn event". Events only flow for a **subscribed** session. `attachEventBuffer` listens
+for whatever arrives; nothing was subscribed, so nothing arrived.
+
+### The red herring I chased
+
+`session.model_selection.persist_failed` looked like the smoking gun. It is not:
+
+| Day | occurrences | whose sessions |
+|---|---|---|
+| 09-07 | 3 | the desktop, before this project touched anything |
+| 09-08 | 11 | the desktop |
+| 09-09 | 16 | the desktop |
+| 09-10 | 8 | the desktop |
+| 09-11 | 7 | mixed |
+
+and for a working session the sequence is:
+
+```
+14:42:55  session.model_selection.persist_failed   sess_8db1ca01
+14:45:27  session.persistence.completed            sess_8db1ca01   <- persists anyway, fine
+```
+
+It fires at `bootstrap`, twice, for every session including the desktop's own, and is **harmless**.
+I over-weighted a warning that ZCode emits routinely.
+
+### The mechanics, now known exactly
+
+`persistence: "deferred"` is the platform's own default (hardcoded in its `createSessionRecord`
+adapter). The session row is written by `ensureSessionPersisted` (registered name of `sGr`), which is
+called from exactly three places — **all turn-start paths**:
+
+| Caller | When |
+|---|---|
+| the regular turn path, phase `session_persistence` | first turn |
+| `compact` | compaction |
+| `rewind` | rewind |
+
+So a session created but never turned **has no row, by design**. The row appears when the session is
+first used, which is the same turn whose input needs it — the platform resolves that by admitting the
+first input **inside** the create command, after the record step.
+
+Practically: `session/create` is fine for "make me a session"; it is the *ordering* of a separate
+input admission that must never precede first use.
+
+### What this changes in the MCP
+
+- `zcode_chat send` must use `v4/command {type:"createSession", payload:{workspaceId, firstInput}}` when
+  the caller has no session yet, and `{type:"sendText"}` only for an existing, already-used session.
+- It must **subscribe** before waiting for terminal events.
+- `zcode_session create` currently leaves a session that cannot be sent to as a separate step; it should
+  either create with the first input, or warn that the session has no row until first use.
+
+Genuinely useful outcome of chasing this: we now know the exact ordering contract, and the honesty rule
+held throughout — every failure was reported as a failure with ZCode's own reason code, never as a
+success.

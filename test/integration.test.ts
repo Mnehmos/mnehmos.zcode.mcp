@@ -148,4 +148,71 @@ describe('integration: real ZCode runtime', () => {
     expect(pidAlive(pid)).toBe(false);
     t = null;
   }, 30_000);
+
+  /**
+   * The M2 gate: a provider reaches the runtime, and the runtime reports it.
+   *
+   * This is the second critical-path item. It proves the environment bootstrap works by observing
+   * `model.current` change from the sentinel `missing-model` to the injected one, and
+   * `modelCatalog.available` become non-empty.
+   *
+   * It costs nothing: no turn is started, so no model call is made. The base URL is deliberately
+   * unresolvable so that even if something did try to reach out, it cannot.
+   */
+  describe('provider bootstrap (M2)', () => {
+    async function readModel(env: NodeJS.ProcessEnv) {
+      const child = createTransport({
+        cli: discovery.cli!,
+        node,
+        cwd: scratchForProvider(),
+        runId: `it-provider-${Object.keys(env).length}`,
+        env,
+      });
+      try {
+        const reply = await call(child, 1, 'workspace/readState', {
+          workspace: { workspacePath: scratchForProvider(), workspaceKey: scratchForProvider() },
+        });
+        if (reply.kind !== 'result') throw new Error(`readState failed: ${JSON.stringify(reply)}`);
+        const r = reply.result as {
+          settings?: { model?: { current?: { modelId?: string; providerId?: string } } };
+          modelCatalog?: { available?: unknown[] };
+        };
+        return {
+          current: r.settings?.model?.current ?? {},
+          available: r.modelCatalog?.available?.length ?? 0,
+        };
+      } finally {
+        await child.disposeAndWait(4_000);
+      }
+    }
+
+    it('reports the sentinel when no provider is configured', async () => {
+      if (!enabled) return;
+      const { current } = await readModel({});
+      // A clean child with no provider must self-report as unconfigured, not pretend.
+      expect(current.modelId).toBe('missing-model');
+      expect(current.providerId).toBe('zcode-unconfigured');
+    }, 60_000);
+
+    it('picks up ZCODE_MODEL and exposes it in the catalogue', async () => {
+      if (!enabled) return;
+      const { current, available } = await readModel({
+        ZCODE_MODEL: 'mcp-probe/probe-model',
+        ZCODE_BASE_URL: 'https://example.invalid/v1',
+        ZCODE_API_KEY: 'probe-not-a-real-key',
+      });
+      expect(current.modelId).toBe('probe-model');
+      expect(current.providerId).toBe('mcp-probe');
+      expect(available).toBeGreaterThan(0);
+    }, 60_000);
+  });
 });
+
+let providerScratch: string | null = null;
+function scratchForProvider(): string {
+  if (!providerScratch) {
+    providerScratch = path.resolve('work', 'scratch-provider');
+    fs.mkdirSync(providerScratch, { recursive: true });
+  }
+  return providerScratch;
+}

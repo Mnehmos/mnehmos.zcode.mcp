@@ -1,0 +1,2767 @@
+{
+ "schemaVersion": "zcode.model-providers.v1",
+ "source": "models_catalog_china_llm_zcode_2026-06-03.json",
+ "providerCount": 10,
+ "modelCount": 130,
+ "providers": [
+  {
+   "id": "moonshot-kimi",
+   "name": "Moonshot AI / Kimi",
+   "baseURL": "https://api.moonshot.cn",
+   "anthropicPath": "/anthropic/v1/messages",
+   "openaiCompatiblePath": "/v1/chat/completions",
+   "defaultKind": "anthropic",
+   "models": [
+    {
+     "id": "kimi-k3",
+     "name": "kimi-k3",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "video"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1048576,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "high",
+      "low",
+      "max"
+     ],
+     "reasoningDefault": "max"
+    },
+    {
+     "id": "k3",
+     "name": "k3",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "video"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1048576,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "high",
+      "low",
+      "max"
+     ],
+     "reasoningDefault": "max"
+    },
+    {
+     "id": "k3-256k",
+     "name": "k3-256k",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "video"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 262144,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "high",
+      "low",
+      "max"
+     ],
+     "reasoningDefault": "max"
+    },
+    {
+     "id": "kimi-k2.6",
+     "name": "kimi-k2.6",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "video"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 262144,
+     "maxOutputTokens": 98304,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "kimi-k2.5",
+     "name": "kimi-k2.5",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 262144,
+     "maxOutputTokens": 98304,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "moonshot-v1-8k",
+     "name": "moonshot-v1-8k",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 8192,
+     "maxOutputTokens": null
+    },
+    {
+     "id": "moonshot-v1-32k",
+     "name": "moonshot-v1-32k",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 32768,
+     "maxOutputTokens": null
+    },
+    {
+     "id": "moonshot-v1-128k",
+     "name": "moonshot-v1-128k",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": null
+    },
+    {
+     "id": "moonshot-v1-8k-vision-preview",
+     "name": "moonshot-v1-8k-vision-preview",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 8192,
+     "maxOutputTokens": null
+    },
+    {
+     "id": "moonshot-v1-32k-vision-preview",
+     "name": "moonshot-v1-32k-vision-preview",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 32768,
+     "maxOutputTokens": null
+    },
+    {
+     "id": "moonshot-v1-128k-vision-preview",
+     "name": "moonshot-v1-128k-vision-preview",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": null
+    }
+   ]
+  },
+  {
+   "id": "minimax",
+   "name": "MiniMax",
+   "baseURL": "https://api.minimaxi.com",
+   "anthropicPath": "/anthropic/v1/messages",
+   "openaiCompatiblePath": "/v1/chat/completions",
+   "defaultKind": "anthropic",
+   "models": [
+    {
+     "id": "MiniMax-M3",
+     "name": "MiniMax-M3",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "video"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": null
+    },
+    {
+     "id": "MiniMax-M2.7",
+     "name": "MiniMax-M2.7",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 204800,
+     "maxOutputTokens": null
+    },
+    {
+     "id": "MiniMax-M2.7-highspeed",
+     "name": "MiniMax-M2.7-highspeed",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 204800,
+     "maxOutputTokens": null
+    },
+    {
+     "id": "MiniMax-M2.5",
+     "name": "MiniMax-M2.5",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 204800,
+     "maxOutputTokens": null
+    },
+    {
+     "id": "MiniMax-M2.5-highspeed",
+     "name": "MiniMax-M2.5-highspeed",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 204800,
+     "maxOutputTokens": null
+    },
+    {
+     "id": "MiniMax-M2.1",
+     "name": "MiniMax-M2.1",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 204800,
+     "maxOutputTokens": null
+    },
+    {
+     "id": "MiniMax-M2.1-highspeed",
+     "name": "MiniMax-M2.1-highspeed",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 204800,
+     "maxOutputTokens": null
+    },
+    {
+     "id": "MiniMax-M2",
+     "name": "MiniMax-M2",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 204800,
+     "maxOutputTokens": 131072
+    }
+   ]
+  },
+  {
+   "id": "deepseek",
+   "name": "DeepSeek",
+   "baseURL": "https://api.deepseek.com",
+   "anthropicPath": "/anthropic/v1/messages",
+   "openaiCompatiblePath": "/chat/completions",
+   "defaultKind": "anthropic",
+   "models": [
+    {
+     "id": "deepseek-v4-flash",
+     "name": "deepseek-v4-flash",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 384000,
+     "reasoningLevels": [
+      "high",
+      "max",
+      "off"
+     ],
+     "reasoningDefault": "max"
+    },
+    {
+     "id": "deepseek-v4-pro",
+     "name": "deepseek-v4-pro",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 384000,
+     "reasoningLevels": [
+      "high",
+      "max",
+      "off"
+     ],
+     "reasoningDefault": "max"
+    }
+   ]
+  },
+  {
+   "id": "qwen-alibaba-model-studio-cn",
+   "name": "Qwen / Alibaba Cloud Model Studio (China)",
+   "baseURL": "https://dashscope.aliyuncs.com",
+   "anthropicPath": "/apps/anthropic/v1/messages",
+   "openaiCompatiblePath": "/compatible-mode/v1/chat/completions",
+   "defaultKind": "anthropic",
+   "models": [
+    {
+     "id": "qwen3.5-plus",
+     "name": "qwen3.5-plus",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "video"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 65536,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "qwen3.5-flash",
+     "name": "qwen3.5-flash",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "video"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 65536,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "qwen3-max",
+     "name": "qwen3-max",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 262144,
+     "maxOutputTokens": 65536
+    },
+    {
+     "id": "qwen-plus",
+     "name": "qwen-plus",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 32768,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "qwen-flash",
+     "name": "qwen-flash",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 32768,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "qwen3-vl-plus",
+     "name": "qwen3-vl-plus",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "video"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 262144,
+     "maxOutputTokens": 32768,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    }
+   ]
+  },
+  {
+   "id": "qwen-alibaba-model-studio-intl",
+   "name": "Qwen / Alibaba Cloud Model Studio (International)",
+   "baseURL": "https://dashscope-intl.aliyuncs.com",
+   "anthropicPath": null,
+   "openaiCompatiblePath": "/compatible-mode/v1/chat/completions",
+   "defaultKind": "openai-compatible",
+   "models": [
+    {
+     "id": "qwen3.5-plus",
+     "name": "qwen3.5-plus",
+     "kinds": [
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "video"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 65536,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "qwen3.5-flash",
+     "name": "qwen3.5-flash",
+     "kinds": [
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "video"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 65536,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "qwen3-max",
+     "name": "qwen3-max",
+     "kinds": [
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 262144,
+     "maxOutputTokens": 65536
+    },
+    {
+     "id": "qwen-plus",
+     "name": "qwen-plus",
+     "kinds": [
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 32768,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "qwen-flash",
+     "name": "qwen-flash",
+     "kinds": [
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 32768,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "qwen3-vl-plus",
+     "name": "qwen3-vl-plus",
+     "kinds": [
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "video"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 262144,
+     "maxOutputTokens": 32768,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    }
+   ]
+  },
+  {
+   "id": "xiaomi-mimo",
+   "name": "Xiaomi MiMo",
+   "baseURL": "https://api.xiaomimimo.com",
+   "anthropicPath": "/anthropic/v1/messages",
+   "openaiCompatiblePath": "/v1/chat/completions",
+   "defaultKind": "anthropic",
+   "models": [
+    {
+     "id": "mimo-v2.5-pro",
+     "name": "mimo-v2.5-pro",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "mimo-v2.5",
+     "name": "mimo-v2.5",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "audio",
+       "video"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "mimo-v2-pro",
+     "name": "mimo-v2-pro",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 131072
+    },
+    {
+     "id": "mimo-v2-omni",
+     "name": "mimo-v2-omni",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "audio",
+       "video"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 262144,
+     "maxOutputTokens": 131072
+    },
+    {
+     "id": "mimo-v2-flash",
+     "name": "mimo-v2-flash",
+     "kinds": [
+      "anthropic",
+      "openai-compatible"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 262144,
+     "maxOutputTokens": 65536,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    }
+   ]
+  },
+  {
+   "id": "zai",
+   "name": "Z.AI",
+   "baseURL": "https://api.z.ai",
+   "anthropicPath": "/api/anthropic/v1/messages",
+   "openaiCompatiblePath": null,
+   "defaultKind": "anthropic",
+   "models": [
+    {
+     "id": "glm-5.3",
+     "name": "GLM-5.3",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 128000,
+     "reasoningLevels": [
+      "high",
+      "low",
+      "max"
+     ],
+     "reasoningDefault": "max"
+    },
+    {
+     "id": "glm-5.1",
+     "name": "glm-5.1",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 64000,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-5.1-highspeed",
+     "name": "glm-5.1-highspeed",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 64000,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-5",
+     "name": "glm-5",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 64000,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-5-turbo",
+     "name": "glm-5-turbo",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 64000,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-5v-turbo",
+     "name": "GLM-5V-Turbo",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "video",
+       "pdf"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.7",
+     "name": "glm-4.7",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.7-flashx",
+     "name": "glm-4.7-flashx",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.7-flash",
+     "name": "glm-4.7-flash",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.6",
+     "name": "glm-4.6",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.5-air",
+     "name": "glm-4.5-air",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 98304,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.5",
+     "name": "glm-4.5",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 98304,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.6v",
+     "name": "glm-4.6v",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4.6v-flash",
+     "name": "glm-4.6v-flash",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4.6v-flashx",
+     "name": "glm-4.6v-flashx",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4.1v-thinking-flashx",
+     "name": "glm-4.1v-thinking-flashx",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 65536,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4.1v-thinking-flash",
+     "name": "glm-4.1v-thinking-flash",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 65536,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4-flashx-250414",
+     "name": "glm-4-flashx-250414",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 16384
+    },
+    {
+     "id": "glm-4-flash-250414",
+     "name": "glm-4-flash-250414",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 16384
+    },
+    {
+     "id": "glm-4v-flash",
+     "name": "glm-4v-flash",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 16384,
+     "maxOutputTokens": 1024
+    },
+    {
+     "id": "codegeex-4",
+     "name": "codegeex-4",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "charglm-4",
+     "name": "charglm-4",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 8192,
+     "maxOutputTokens": 4096
+    },
+    {
+     "id": "emohaa",
+     "name": "emohaa",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 8192,
+     "maxOutputTokens": 4096
+    }
+   ]
+  },
+  {
+   "id": "bigmodel",
+   "name": "BigModel / \u667a\u8c31",
+   "baseURL": "https://open.bigmodel.cn",
+   "anthropicPath": "/api/anthropic/v1/messages",
+   "openaiCompatiblePath": null,
+   "defaultKind": "anthropic",
+   "models": [
+    {
+     "id": "glm-5.3",
+     "name": "GLM-5.3",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 128000,
+     "reasoningLevels": [
+      "high",
+      "low",
+      "max"
+     ],
+     "reasoningDefault": "max"
+    },
+    {
+     "id": "glm-5.1",
+     "name": "glm-5.1",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 64000,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-5.1-highspeed",
+     "name": "glm-5.1-highspeed",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 64000,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-5",
+     "name": "glm-5",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 64000,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-5-turbo",
+     "name": "glm-5-turbo",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 64000,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-5v-turbo",
+     "name": "GLM-5V-Turbo",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "video",
+       "pdf"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.7",
+     "name": "glm-4.7",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.7-flashx",
+     "name": "glm-4.7-flashx",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.7-flash",
+     "name": "glm-4.7-flash",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.6",
+     "name": "glm-4.6",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.5-air",
+     "name": "glm-4.5-air",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 98304,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.5",
+     "name": "glm-4.5",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 98304,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.6v",
+     "name": "glm-4.6v",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4.6v-flash",
+     "name": "glm-4.6v-flash",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4.6v-flashx",
+     "name": "glm-4.6v-flashx",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4.1v-thinking-flashx",
+     "name": "glm-4.1v-thinking-flashx",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 65536,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4.1v-thinking-flash",
+     "name": "glm-4.1v-thinking-flash",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 65536,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4-flashx-250414",
+     "name": "glm-4-flashx-250414",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 16384
+    },
+    {
+     "id": "glm-4-flash-250414",
+     "name": "glm-4-flash-250414",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 16384
+    },
+    {
+     "id": "glm-4v-flash",
+     "name": "glm-4v-flash",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 16384,
+     "maxOutputTokens": 1024
+    },
+    {
+     "id": "codegeex-4",
+     "name": "codegeex-4",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "charglm-4",
+     "name": "charglm-4",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 8192,
+     "maxOutputTokens": 4096
+    },
+    {
+     "id": "emohaa",
+     "name": "emohaa",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 8192,
+     "maxOutputTokens": 4096
+    }
+   ]
+  },
+  {
+   "id": "zai-coding-plan",
+   "name": "Z.AI Coding Plan",
+   "baseURL": "https://api.z.ai",
+   "anthropicPath": "/api/anthropic/v1/messages",
+   "openaiCompatiblePath": null,
+   "defaultKind": "anthropic",
+   "models": [
+    {
+     "id": "glm-5.3",
+     "name": "GLM-5.3",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 128000,
+     "reasoningLevels": [
+      "high",
+      "low",
+      "max"
+     ],
+     "reasoningDefault": "max"
+    },
+    {
+     "id": "glm-5.1",
+     "name": "glm-5.1",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 64000,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-5.1-highspeed",
+     "name": "glm-5.1-highspeed",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 64000,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-5",
+     "name": "glm-5",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 64000,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-5-turbo",
+     "name": "glm-5-turbo",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 64000,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-5v-turbo",
+     "name": "GLM-5V-Turbo",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "video",
+       "pdf"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.7",
+     "name": "glm-4.7",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.7-flashx",
+     "name": "glm-4.7-flashx",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.7-flash",
+     "name": "glm-4.7-flash",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.6",
+     "name": "glm-4.6",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.5-air",
+     "name": "glm-4.5-air",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 98304,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.5",
+     "name": "glm-4.5",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 98304,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.6v",
+     "name": "glm-4.6v",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4.6v-flash",
+     "name": "glm-4.6v-flash",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4.6v-flashx",
+     "name": "glm-4.6v-flashx",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4.1v-thinking-flashx",
+     "name": "glm-4.1v-thinking-flashx",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 65536,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4.1v-thinking-flash",
+     "name": "glm-4.1v-thinking-flash",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 65536,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4-flashx-250414",
+     "name": "glm-4-flashx-250414",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 16384
+    },
+    {
+     "id": "glm-4-flash-250414",
+     "name": "glm-4-flash-250414",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 16384
+    },
+    {
+     "id": "glm-4v-flash",
+     "name": "glm-4v-flash",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 16384,
+     "maxOutputTokens": 1024
+    },
+    {
+     "id": "codegeex-4",
+     "name": "codegeex-4",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "charglm-4",
+     "name": "charglm-4",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 8192,
+     "maxOutputTokens": 4096
+    },
+    {
+     "id": "emohaa",
+     "name": "emohaa",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 8192,
+     "maxOutputTokens": 4096
+    }
+   ]
+  },
+  {
+   "id": "bigmodel-coding-plan",
+   "name": "BigModel / \u667a\u8c31 Coding Plan",
+   "baseURL": "https://open.bigmodel.cn",
+   "anthropicPath": "/api/anthropic/v1/messages",
+   "openaiCompatiblePath": null,
+   "defaultKind": "anthropic",
+   "models": [
+    {
+     "id": "glm-5.3",
+     "name": "GLM-5.3",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 1000000,
+     "maxOutputTokens": 128000,
+     "reasoningLevels": [
+      "high",
+      "low",
+      "max"
+     ],
+     "reasoningDefault": "max"
+    },
+    {
+     "id": "glm-5.1",
+     "name": "glm-5.1",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 64000,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-5.1-highspeed",
+     "name": "glm-5.1-highspeed",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 64000,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-5",
+     "name": "glm-5",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 64000,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-5-turbo",
+     "name": "glm-5-turbo",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 64000,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-5v-turbo",
+     "name": "GLM-5V-Turbo",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image",
+       "video",
+       "pdf"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.7",
+     "name": "glm-4.7",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.7-flashx",
+     "name": "glm-4.7-flashx",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.7-flash",
+     "name": "glm-4.7-flash",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.6",
+     "name": "glm-4.6",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 200000,
+     "maxOutputTokens": 131072,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.5-air",
+     "name": "glm-4.5-air",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 98304,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.5",
+     "name": "glm-4.5",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 98304,
+     "reasoningLevels": [
+      "enabled",
+      "off"
+     ],
+     "reasoningDefault": "enabled"
+    },
+    {
+     "id": "glm-4.6v",
+     "name": "glm-4.6v",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4.6v-flash",
+     "name": "glm-4.6v-flash",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4.6v-flashx",
+     "name": "glm-4.6v-flashx",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4.1v-thinking-flashx",
+     "name": "glm-4.1v-thinking-flashx",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 65536,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4.1v-thinking-flash",
+     "name": "glm-4.1v-thinking-flash",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 65536,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "glm-4-flashx-250414",
+     "name": "glm-4-flashx-250414",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 16384
+    },
+    {
+     "id": "glm-4-flash-250414",
+     "name": "glm-4-flash-250414",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 16384
+    },
+    {
+     "id": "glm-4v-flash",
+     "name": "glm-4v-flash",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text",
+       "image"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 16384,
+     "maxOutputTokens": 1024
+    },
+    {
+     "id": "codegeex-4",
+     "name": "codegeex-4",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 131072,
+     "maxOutputTokens": 32768
+    },
+    {
+     "id": "charglm-4",
+     "name": "charglm-4",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 8192,
+     "maxOutputTokens": 4096
+    },
+    {
+     "id": "emohaa",
+     "name": "emohaa",
+     "kinds": [
+      "anthropic"
+     ],
+     "modalities": {
+      "input": [
+       "text"
+      ],
+      "output": [
+       "text"
+      ]
+     },
+     "contextWindow": 8192,
+     "maxOutputTokens": 4096
+    }
+   ]
+  }
+ ]
+}

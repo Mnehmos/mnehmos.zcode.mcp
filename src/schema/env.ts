@@ -32,6 +32,15 @@ const EnvSchema = z.object({
   /** Workspace used when a call omits one. */
   ZCODE_MCP_WORKSPACE: z.string().optional(),
 
+  /**
+   * Model provider to install into spawned runtimes, as "<model>" or "<provider>/<model>".
+   * Delivered to the child as ZCODE_MODEL (+ ZCODE_BASE_URL), which the agent reads as a
+   * priority-40 config layer. The credential comes from the ambient environment
+   * (ZCODE_API_KEY / ANTHROPIC_API_KEY / <PROVIDER>_API_KEY) and is never written to a file.
+   */
+  ZCODE_MCP_MODEL: z.string().optional(),
+  ZCODE_MCP_BASE_URL: z.string().optional(),
+
   ZCODE_MCP_WORK_DIR: z.string().default(path.join(packageRoot, 'work')),
   ZCODE_MCP_DB: z.string().default(path.join(packageRoot, 'data', 'audit.db')),
 
@@ -65,6 +74,15 @@ const EnvSchema = z.object({
   ZCODE_MCP_ALLOW_PLUGIN_INSTALL: z.string().optional(),
   ZCODE_MCP_ALLOW_MCP_CONFIG_EDIT: z.string().optional(),
   ZCODE_MCP_ALLOW_PERSIST_RULES: z.string().optional(),
+
+  /**
+   * Comma-separated environment variable names to RE-ADMIT to a spawned runtime.
+   *
+   * By default every credential-shaped variable is withheld from the child, so a runtime never
+   * inherits a credential it was not given. Set this when the agent's own shell genuinely needs one
+   * (e.g. a git token) — naming it is an explicit decision rather than an accident.
+   */
+  ZCODE_MCP_CHILD_ENV_PASSTHROUGH: z.string().optional(),
 
   /** Secret scrubbing. Never disable in shared or logged use. */
   ZCODE_MCP_REDACT: z.string().default('1'),

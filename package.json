@@ -1,6 +1,6 @@
 {
   "name": "mnehmos.zcode.mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -14,7 +14,10 @@
     "test:only": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:it": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=integration",
     "methods": "python tools/zcode_methods.py",
-    "smoke": "node dist/index.js --self-test"
+    "smoke": "node dist/index.js --self-test",
+    "start:env": "node --env-file=.env dist/index.js",
+    "scan:secrets": "python tools/scan_secrets.py",
+    "scan:staged": "python tools/scan_secrets.py --staged"
   },
   "keywords": [
     "mcp",

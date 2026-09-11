@@ -134,11 +134,19 @@ Rules:
 ## Gates (all must pass before you call anything done)
 
 ```sh
+npm run scan:secrets              # no real credential anywhere in git history. FIRST, always.
 npm run typecheck
 npm test                          # typecheck + unit tests
 npm run smoke                     # node dist/index.js --self-test
 ZCODE_MCP_IT=1 npm test           # real runtime; asserts a real turn and zero orphans
 ```
+
+**Run `npm run scan:secrets` before every push.** A real API key was once committed inside a test
+fixture because it *looked* synthetic — 32 hex chars, a dot, 16 base64ish characters, which is exactly
+the shape of a fake token and exactly the shape of a real one. Shape-plausible is not synthetic, and a
+test fixture is still a committed file. The scanner reads the machine's real secret stores and searches
+every git object and commit message for those values, so the check is mechanical rather than a
+judgement call. Removing a leaked value from HEAD does not un-expose it; only rotation does that.
 
 ## Style
 

@@ -78,83 +78,34 @@ Therefore:
 `mnehmos.zcode.mcp` v0.1 ships **Tier A only** — and the audit showed Tier A is the *only* local
 option, which means there is exactly one clean boundary: the agent runtime's stdio protocol.
 
-#### 1.1.1 Provider bootstrap — the schema is known ★
+#### 1.1.1 Provider bootstrap — environment only ★ (proven)
 
-Reconnaissance resolved this statically (`ZCODE_UNKNOWNS.md` U-3). The agent reads its model config
-from the top-level `model` key, sourced **project-first then user**
-(`~/.zcode/cli/config.json` by default):
-
-```jsonc
-{
-  "model": {
-    "main": { "provider": "<id>", "model": "<modelId>",
-              "kind": "anthropic" | "openai" | "openai-compatible",
-              "baseURL": "https://…", "apiKeyRequired": true },
-    "lite": { },        // optional
-    "available": [ ]    // optional
-  }
-}
-```
-
-**The API key may come entirely from the environment** — resolution order is
-`OPENAI_API_KEY` → `ANTHROPIC_API_KEY` → `<PROVIDERNAME>_API_KEY` → `<PROVIDER>_API_KEY` →
-`ZCODE_API_KEY`. The MCP therefore **injects the key via the child's environment and never writes a
-secret to disk**; only `provider` / `model` / `kind` / `baseURL` go into a generated settings file.
-
-### 1.2 Consequence of owning the runtime: we must answer `interaction/*`
-
-A spawned `app-server` sends **client requests** to its only client (us):
+A bare runtime has no provider and self-reports `{modelId:"missing-model", providerId:"zcode-unconfigured"}`.
+The fix is **three environment variables** in the child, read by the agent's `parseEnvConfig` as a
+priority-40 config layer:
 
 ```
-{"id":"server-1","method":"interaction/requestPermission","params":{sessionId,requestId,…}}
-{"id":"server-2","method":"interaction/requestUserInput","params":{…}}
-{"id":"other",  "method":"interaction/requestProviderRuntimeHeaders","params":{…}}
-{"id":"other",  "method":"interaction/requestOfficialMcpAuthHeaders","params":{…}}
-{"id":"other",  "method":"session/requestRuntimePreferences","params":{scope,sessionId}}
-{"id":"other",  "method":"interaction/browserList"|"interaction/browserExecute", …}
+ZCODE_MODEL      "<model>"  or  "<provider>/<model>"
+ZCODE_BASE_URL   model base URL            (see the hazard below)
+ZCODE_API_KEY    the credential            (also accepts ANTHROPIC_API_KEY / <PROVIDER>_API_KEY)
 ```
-Unanswered, these block the turn. So `src/zcode/policy.ts` implements a **default-deny** policy and
-a pending-request queue surfaced through `zcode_approval`:
 
-| Env | Behaviour |
-|---|---|
-| `ZCODE_MCP_APPROVAL=deny` (**default**) | auto-deny; every denial is recorded and visible in `zcode_approval list` |
-| `ZCODE_MCP_APPROVAL=allow` | auto-allow (only for trusted, sandboxed workspaces) |
-| `ZCODE_MCP_APPROVAL` = allowlist file | allow only listed `toolName` / `toolName(ruleContent)` patterns |
-| `ZCODE_MCP_APPROVAL=ask` | hold pending; the caller resolves via `zcode_approval respond {request_id, decision, rule?}` |
-| `session/requestRuntimePreferences` | always answered locally from config (never blocks) |
-| `interaction/requestProviderRuntimeHeaders` | answered from the configured provider block |
-| `interaction/browserList` / `browserExecute` | answered `{browsers:[]}` / `{ok:false, error:{code:"backend_unavailable"}}` unless a browser backend is configured |
+**No file is written.** An earlier design generated `<workspace>/.zcode/config.json`; it was abandoned
+because (a) it pollutes a user's working tree to configure a process we own, and (b) it **does not
+work** — the project and user config layers reject a minimal `model` block, silently.
 
-`mode` defaults to `edit`; `yolo` is opt-in per call.
+**Verified at zero cost:** with `ZCODE_MODEL` set, a spawned runtime reports the injected model in
+`workspace/readState` and `modelCatalog.available` goes from 0 to 1; without it, the `missing-model`
+sentinel stands. No credential is used and no model call is made.
 
-### 1.3 Process model
+⚠ **Hazard:** `ZCODE_BASE_URL` is read by *two* subsystems — as the model base URL here, and by the
+endpoint resolver as the ZCode control-plane origin (OAuth / plan / telemetry). For a local agent
+runtime the latter is unused, but do not point it at an endpoint you would not also accept as the API
+origin. The server emits an `advisory` warning whenever it sets the variable.
 
-- One `app-server` child **per `workspaceKey`**, lazily spawned, reused across calls.
-- Registry keyed by `workspaceKey` (the system-wide join key — see `ZCODE_STATE_MODEL.md` §1.1).
-- Idle eviction (`ZCODE_MCP_CHILD_IDLE_MS`, default 15 min) closes stdin and kills the **owned
-  process group**, mirroring ZCode's own `disposeAndWait` behaviour.
-- Hard cap `ZCODE_MCP_MAX_CHILDREN` (default 2) to bound memory: each runtime is a ~12.6 MB bundle
-  plus its SQLite handles.
-- Startup grace: the runtime answers the first request in ~1.1 s; the transport waits for the first
-  response with `ZCODE_MCP_STARTUP_MS` (default 30 s) before declaring failure.
-- **`--cwd` is always an explicit workspace root**, never inherited.
-
-### 1.4 Wire discipline
-
-- Request ids are monotonically increasing integers, stringified on send (matches the client
-  contract), echoed back verbatim.
-- `maxFrameBytes` = 1 MiB is enforced **before** send; larger payloads are routed through
-  `v4/attachment/begin|chunk|commit`.
-- Every line in and out is appended to `work/wire/<runId>.ndjson` with secrets redacted.
-- Notifications are buffered into a bounded ring per session
-  (`ZCODE_MCP_EVENT_BUFFER`, default 2000 — matching `eventRetentionPerSession`).
-- `maxFrameBytes`/`logicalFrameAssembly*` limits and the protocol name/version are **read from the
-  live runtime** at first contact (`version` + a probe `session/list`) and recorded in the audit row;
-  a mismatch against the baked-in catalog degrades the vocabulary, it does not silently pass.
-
----
-
+⚠ **Limitation:** this path pins the provider `kind` to `anthropic`. A genuinely `openai-compatible`
+provider cannot be expressed through the environment and must be configured by the user in their own
+file. The server reports that rather than mangling the value.
 ## 2. Tool surface
 
 14 tools, discriminated-union `action` in each — matching the sibling repo convention and staying
