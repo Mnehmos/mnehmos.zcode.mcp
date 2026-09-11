@@ -63,6 +63,8 @@ export const SessionArgs = z.discriminatedUnion('action', [
     thought_level: z.string().min(1).optional(),
     mcp_servers: z.array(z.string().min(1)).max(64).optional(),
     title_generation: z.boolean().optional(),
+    persistence: z.enum(['immediate', 'deferred']).optional()
+      .describe('Default "immediate". A deferred session has no database row until it is first used.'),
   }),
   z.object({ action: z.literal('resume'), session_id: SessionId, model: z.string().min(1).optional(), thought_level: z.string().min(1).optional() }),
   z.object({ action: z.literal('close'), session_id: SessionId }),
@@ -252,6 +254,29 @@ export const AutomationArgs = z.discriminatedUnion('action', [
 
 export const UsageArgs = z.object({ action: z.literal('stats'), range: Range });
 
+// ── zcode_models ─────────────────────────────────────────────────────────────
+
+export const ModelsArgs = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('catalog'),
+    provider: z.string().min(1).optional(),
+    min_context: z.number().int().min(1).optional().describe('Only models whose context window is at least this.'),
+    input_modality: z.enum(['text', 'image', 'audio', 'video', 'pdf']).optional(),
+    reasoning_level: z.string().min(1).optional(),
+    kind: z.enum(['anthropic', 'openai', 'openai-compatible']).optional(),
+  }),
+  z.object({ action: z.literal('available'), workspace: Workspace.optional(), session_id: SessionId.optional() }),
+  z.object({ action: z.literal('current'), workspace: Workspace.optional(), session_id: SessionId.optional() }),
+  z.object({
+    action: z.literal('select'),
+    scope: z.enum(['server', 'workspace', 'session']).optional().describe('Default: session.'),
+    model: z.string().min(1).describe('"<model>" or "<provider>/<model>".'),
+    provider: z.string().min(1).optional().describe('Required for scope "server".'),
+    workspace: Workspace.optional(),
+    session_id: SessionId.optional(),
+  }),
+]);
+
 // ── zcode_approval ───────────────────────────────────────────────────────────
 
 export const ApprovalArgs = z.discriminatedUnion('action', [
@@ -395,6 +420,18 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     name: 'zcode_usage',
     description: 'Token and activity analytics. Read-only.',
     schema: UsageArgs,
+  },
+  {
+    name: 'zcode_models',
+    description:
+      'Discover models and providers, and select one. ACTION "catalog" is the decision surface: it ' +
+      'lists what ZCode can talk to with context windows, modalities, reasoning levels and whether ' +
+      'this server holds a credential for that provider — filterable, and deliberately NOT ranked, ' +
+      'because choosing a model is the job of the caller. "available" reports what the runtime has ' +
+      'wired up ' +
+      '(a different question). "select" applies a choice at session, workspace or server scope; ' +
+      'server scope affects only newly spawned runtimes in this process and does not persist.',
+    schema: ModelsArgs,
   },
   {
     name: 'zcode_approval',

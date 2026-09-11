@@ -14,7 +14,8 @@
     "test:only": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:it": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=integration",
     "methods": "python tools/zcode_methods.py",
-    "smoke": "node dist/index.js --self-test"
+    "smoke": "node dist/index.js --self-test",
+    "start:env": "node --env-file=.env dist/index.js"
   },
   "keywords": [
     "mcp",

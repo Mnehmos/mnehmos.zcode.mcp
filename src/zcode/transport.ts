@@ -59,7 +59,13 @@ export interface TransportOptions {
   stderrDir?: string;
   /** Identifier used to name the wire and stderr files. */
   runId: string;
-  /** Env for the child. The provider key is injected here, never written to a file. */
+  /**
+   * The child's COMPLETE environment.
+   *
+   * Not merged with `process.env`: the caller is expected to pass a built environment
+   * (see `buildChildEnv`), because inheriting our own environment would hand the runtime every
+   * credential this process happens to hold.
+   */
   env?: NodeJS.ProcessEnv;
   /** Bound on retained stderr lines. */
   stderrTailLimit?: number;
@@ -140,7 +146,7 @@ export class ZCodeStdioTransport extends EventEmitter {
       [opts.cli, 'app-server', '--stdio', '--cwd', opts.cwd, ...(opts.extraArgs ?? [])],
       {
         cwd: opts.cwd,
-        env: { ...process.env, ...(opts.env ?? {}) },
+        env: opts.env ?? process.env,
         stdio: ['pipe', 'pipe', 'pipe'],
         // Own process group on POSIX so we can signal the whole tree. On Windows the tree is
         // killed with taskkill /T instead.

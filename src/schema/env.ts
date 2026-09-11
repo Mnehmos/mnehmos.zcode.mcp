@@ -75,6 +75,15 @@ const EnvSchema = z.object({
   ZCODE_MCP_ALLOW_MCP_CONFIG_EDIT: z.string().optional(),
   ZCODE_MCP_ALLOW_PERSIST_RULES: z.string().optional(),
 
+  /**
+   * Comma-separated environment variable names to RE-ADMIT to a spawned runtime.
+   *
+   * By default every credential-shaped variable is withheld from the child, so a runtime never
+   * inherits a credential it was not given. Set this when the agent's own shell genuinely needs one
+   * (e.g. a git token) — naming it is an explicit decision rather than an accident.
+   */
+  ZCODE_MCP_CHILD_ENV_PASSTHROUGH: z.string().optional(),
+
   /** Secret scrubbing. Never disable in shared or logged use. */
   ZCODE_MCP_REDACT: z.string().default('1'),
 });

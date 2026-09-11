@@ -10,6 +10,8 @@ import { describe, expect, it } from '@jest/globals';
 import {
   apiKeyEnvCandidates,
   bootstrapProvider,
+  buildChildEnv,
+  isCredentialEnvVar,
   configHasModel,
   hasAmbientKey,
   resolveApiKey,
@@ -67,6 +69,85 @@ describe('resolveApiKey', () => {
 
   it('ignores blank values', () => {
     expect(resolveApiKey('zai', { ZCODE_API_KEY: '   ' } as NodeJS.ProcessEnv)).toBeNull();
+  });
+});
+
+describe('buildChildEnv — credential isolation', () => {
+  const parent = {
+    PATH: '/usr/bin',
+    HOME: '/home/u',
+    USERPROFILE: 'C:/Users/u',
+    TEMP: '/tmp',
+    SystemRoot: 'C:/Windows',
+    DEEPSEEK_API_KEY: 'ds-secret',
+    OPENROUTER_API_KEY: 'or-secret',
+    ZAI_API_KEY: 'zai-secret',
+    ANTHROPIC_API_KEY: 'anthropic-secret',
+    GITHUB_TOKEN: 'gh-secret',
+    ZCODE_CREDENTIAL_SECRET: 'cipher-secret',
+    NORMAL_VAR: 'keep-me',
+  } as NodeJS.ProcessEnv;
+
+  it('keeps the variables a runtime needs to function', () => {
+    const env = buildChildEnv(null, parent);
+    for (const k of ['PATH', 'HOME', 'USERPROFILE', 'TEMP', 'SystemRoot', 'NORMAL_VAR']) {
+      expect(env[k]).toBe(parent[k]);
+    }
+  });
+
+  it('withholds EVERY credential-shaped variable when none was resolved', () => {
+    // The point of the .env holding three provider keys is that only the SELECTED one reaches the
+    // runtime. Inheriting all three would let it pick whichever matched first.
+    const env = buildChildEnv(null, parent);
+    for (const k of ['DEEPSEEK_API_KEY', 'OPENROUTER_API_KEY', 'ZAI_API_KEY', 'ANTHROPIC_API_KEY', 'GITHUB_TOKEN', 'ZCODE_CREDENTIAL_SECRET']) {
+      expect(env[k]).toBeUndefined();
+    }
+  });
+
+  it('adds back exactly the one key that was resolved', () => {
+    const env = buildChildEnv({ name: 'DEEPSEEK_API_KEY', value: 'the-one' }, parent);
+    expect(env.ZCODE_API_KEY).toBe('the-one');
+    expect(env.OPENROUTER_API_KEY).toBeUndefined();
+    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+  });
+
+  it('re-admits only explicitly named variables via passthrough', () => {
+    const env = buildChildEnv(null, parent, ['GITHUB_TOKEN']);
+    expect(env.GITHUB_TOKEN).toBe('gh-secret');
+    expect(env.DEEPSEEK_API_KEY).toBeUndefined();
+  });
+
+  it('never mutates the parent environment', () => {
+    buildChildEnv(null, parent);
+    expect(parent.DEEPSEEK_API_KEY).toBe('ds-secret');
+  });
+
+  it('classifies credential-shaped names and leaves ordinary ones alone', () => {
+    for (const k of ['DEEPSEEK_API_KEY', 'GITHUB_TOKEN', 'MY_SECRET', 'DB_PASSWORD', 'AWS_CREDENTIAL']) {
+      expect(isCredentialEnvVar(k)).toBe(true);
+    }
+    for (const k of ['PATH', 'USERPROFILE', 'TEMP', 'LANG', 'NODE_ENV', 'ZCODE_MODEL']) {
+      expect(isCredentialEnvVar(k)).toBe(false);
+    }
+  });
+});
+
+describe('apiKeyEnvCandidates — provider-specific wins', () => {
+  it('puts the named provider first, so a shared .env selects the right key', () => {
+    const c = apiKeyEnvCandidates('deepseek');
+    expect(c[0]).toBe('DEEPSEEK_API_KEY');
+    expect(c).toContain('ANTHROPIC_API_KEY');
+    expect(c).toContain('ZCODE_API_KEY');
+  });
+
+  it('resolves the DeepSeek key even when ANTHROPIC_API_KEY is also set', () => {
+    const env = { ANTHROPIC_API_KEY: 'wrong', DEEPSEEK_API_KEY: 'right' } as NodeJS.ProcessEnv;
+    expect(resolveApiKey('deepseek', env)).toEqual({ name: 'DEEPSEEK_API_KEY', value: 'right' });
+  });
+
+  it('falls back to the kind-generic key when the provider has none', () => {
+    const env = { ANTHROPIC_API_KEY: 'generic' } as NodeJS.ProcessEnv;
+    expect(resolveApiKey('some-unknown-provider', env)).toEqual({ name: 'ANTHROPIC_API_KEY', value: 'generic' });
   });
 });
 

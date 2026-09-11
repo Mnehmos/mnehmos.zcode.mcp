@@ -28,6 +28,7 @@ import { statusDispatch } from './zcode/actions/status.js';
 import { sessionDispatch } from './zcode/actions/session.js';
 import { chatDispatch } from './zcode/actions/chat.js';
 import { approvalDispatch } from './zcode/actions/approval.js';
+import { modelsDispatch } from './zcode/actions/models.js';
 import { createTransport } from './zcode/transport.js';
 import { TOOL_REGISTRY } from './schema/tools.js';
 import * as path from 'node:path';
@@ -221,6 +222,8 @@ async function dispatch(ctx: ServerContext, tool: string, args: Record<string, u
       return sessionDispatch(ctx, args);
     case 'zcode_chat':
       return chatDispatch(ctx, args);
+    case 'zcode_models':
+      return modelsDispatch(ctx, args);
     case 'zcode_approval':
       return approvalDispatch(ctx, args);
     default:
@@ -228,7 +231,7 @@ async function dispatch(ctx: ServerContext, tool: string, args: Record<string, u
         ok: false,
         errors: [
           `tool '${tool}' is declared but not yet implemented. ` +
-            'Implemented: zcode_status, zcode_session, zcode_chat, zcode_approval. ' +
+            'Implemented: zcode_status, zcode_session, zcode_chat, zcode_models, zcode_approval. ' +
             'See specs/001-zcode-control/tasks.md for the build order.',
         ],
       });

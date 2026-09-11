@@ -144,6 +144,27 @@ export async function sessionDispatch(
   }
 }
 
+/**
+ * Pull a session id out of a create/fork response.
+ *
+ * ZCode wraps results inconsistently across methods, so accept the shapes we have actually seen
+ * rather than assuming one — and the caller is told the raw response when none of them match.
+ */
+export function extractSessionId(res: unknown): string | null {
+  if (!res || typeof res !== 'object') return null;
+  const r = res as Record<string, unknown>;
+  const direct = ['sessionId', 'session_id', 'id'];
+  for (const k of direct) if (typeof r[k] === 'string') return r[k] as string;
+  for (const k of ['session', 'result', 'data']) {
+    const nested = r[k];
+    if (nested && typeof nested === 'object') {
+      const got = extractSessionId(nested);
+      if (got) return got;
+    }
+  }
+  return null;
+}
+
 function sessionIdOf(args: Record<string, unknown>): string {
   return typeof args.session_id === 'string' ? args.session_id : '';
 }
@@ -203,31 +224,58 @@ async function doCreate(
   if (typeof args.title_generation === 'boolean') params.titleGenerationEnabled = args.title_generation;
   // This is where an allowlist belongs — it is session-scoped, unlike the per-command denylist.
   if (Array.isArray(args.tool_allowlist)) params.toolAllowlist = args.tool_allowlist;
+  // CONFIRMED by probing the runtime's own validator: this field accepts "immediate" | "deferred".
+  // Omitting it left the session unpersisted, so the FIRST turn failed with a SQLite
+  // "FOREIGN KEY constraint failed" — session_input references session(id), and there was no row.
+  // Defaulting to "immediate" makes the session exist on disk before anything is sent to it.
+  params.persistence = typeof args.persistence === 'string' ? args.persistence : 'immediate';
 
   const t = Date.now();
   const created = await runtime.client.request<SessionRecord>('session/create', params);
   o.method('session/create', true, Date.now() - t);
 
-  const newId = typeof created?.sessionId === 'string' ? created.sessionId : null;
+  const newId = extractSessionId(created);
   if (!newId) {
-    o.fail('session/create returned no sessionId, so the session cannot be confirmed');
+    // Report what actually came back rather than only that we could not read it: the response shape
+    // is the thing a reader needs, and hiding it turns a schema question into a mystery.
+    o.fail(
+      `session/create returned no sessionId, so the session cannot be confirmed. ` +
+        `Response was: ${JSON.stringify(created).slice(0, 500)}`,
+    );
+    o.result(created);
     return finish(ctx, o, runId);
   }
 
-  // Read back rather than trusting the create response.
+  // Read back by LISTING rather than by reading the session.
+  //
+  // `session/read` returns a snapshot whose sessionId is nested (and whose projection reports
+  // "unknown" for a session that has not run a turn yet), so comparing against its top level
+  // produced a false mismatch on a create that had actually succeeded. Appearing in the list is
+  // shape-independent and is the thing that matters: the session was persisted and is addressable.
   try {
     const t2 = Date.now();
-    const read = await runtime.client.request<SessionRecord>('session/read', { sessionId: newId });
-    o.method('session/read', true, Date.now() - t2);
-    const agrees =
-      typeof read?.sessionId === 'string' &&
-      read.sessionId === newId &&
-      (!args.mode || read.mode === args.mode);
-    o.readBack(agrees, agrees ? undefined : `created ${newId} but read back ${JSON.stringify(read).slice(0, 200)}`);
-    o.result(read);
+    const listed = await runtime.client.request<{ sessions?: Array<Record<string, unknown>> }>('session/list', {});
+    o.method('session/list', true, Date.now() - t2);
+    const found = (listed?.sessions ?? []).some((x) => extractSessionId(x) === newId);
+    o.readBack(found, found ? undefined : `created ${newId} but it does not appear in session/list`);
+
+    // Mode is reported, not asserted: the snapshot's projection carries defaults until a turn runs,
+    // so a difference here is not evidence the create failed.
+    const rec = (listed?.sessions ?? []).find((x) => extractSessionId(x) === newId);
+    const observedMode = typeof rec?.mode === 'string' ? rec.mode : null;
+    o.result({ session_id: newId, mode: observedMode, requested_mode: params.mode ?? null, session: rec ?? null });
+    if (params.mode && observedMode && observedMode !== params.mode) {
+      o.warn(
+        'mode_not_applied',
+        `requested mode "${String(params.mode)}" but the session reports "${observedMode}". The session ` +
+          'exists; set the mode explicitly with zcode_session set_mode if it matters.',
+        'degraded',
+      );
+    }
   } catch (err) {
-    o.method('session/read', false, 0, describe(err));
-    o.fail(`session ${newId} was created but could not be read back: ${describe(err)}`);
+    o.method('session/list', false, 0, describe(err));
+    o.fail(`session ${newId} was created but could not be confirmed: ${describe(err)}`);
+    o.result({ session_id: newId });
   }
   return finish(ctx, o, runId);
 }

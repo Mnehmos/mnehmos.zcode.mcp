@@ -31,6 +31,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { isSensitiveKey } from './redact.js';
+
 export interface ModelTarget {
   /** Model id, or `<provider>/<model>`. */
   model: string;
@@ -45,6 +47,8 @@ export interface ModelTarget {
 }
 
 export interface BootstrapResult {
+  /** Set when a credential-shaped variable was withheld from the child, for disclosure. */
+  withheldCredentials?: string[];
   /** Where the effective provider came from. */
   source: 'environment' | 'user-config' | 'existing-project-config' | 'none';
   /** Env entries to merge into the child's environment. Never contains a file path key. */
@@ -60,14 +64,58 @@ export interface BootstrapResult {
  */
 export function apiKeyEnvCandidates(provider: string): string[] {
   const norm = (s: string) => s.trim().replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').toUpperCase();
-  const names = new Set<string>();
-  names.add('ANTHROPIC_API_KEY'); // WRo pins kind to anthropic, so this is always a candidate
+  const names: string[] = [];
+  // Provider-specific FIRST. The runtime's own order puts the kind-generic key ahead, which is fine
+  // for a single-provider config and wrong for a shared .env holding several: naming
+  // `deepseek/...` must select the DeepSeek key, not ANTHROPIC_API_KEY.
   for (const n of [provider, provider.replace(/^default[-_]/, '')]) {
     const k = norm(n);
-    if (k) names.add(`${k}_API_KEY`);
+    if (k && !names.includes(`${k}_API_KEY`)) names.push(`${k}_API_KEY`);
   }
-  names.add('ZCODE_API_KEY');
-  return [...names];
+  names.push('ANTHROPIC_API_KEY'); // kind is pinned to anthropic on the env path
+  names.push('ZCODE_API_KEY');
+  return names;
+}
+
+/**
+ * Variables that must never be inherited by a spawned runtime.
+ *
+ * Reuses the redaction vocabulary rather than inventing a second list, so "what counts as a
+ * credential" has exactly one definition in this codebase.
+ */
+export function isCredentialEnvVar(name: string): boolean {
+  return isSensitiveKey(name);
+}
+
+/**
+ * Build the environment for a spawned ZCode runtime.
+ *
+ * Inherit everything EXCEPT credential-shaped variables, then add back the single key we resolved.
+ * Inheritance is broad on purpose — the runtime needs PATH, HOME/USERPROFILE, TEMP and the Windows
+ * essentials to function — but an ambient credential it was not given is a leak, not a convenience.
+ * With several providers configured in one .env, inheriting all of them would also make the runtime
+ * pick whichever matched first rather than the one that was actually selected.
+ *
+ * `ZCODE_MCP_CHILD_ENV_PASSTHROUGH` (comma-separated names) re-admits specific variables for a user
+ * who genuinely wants the agent's shell to have them, e.g. a git token.
+ */
+export function buildChildEnv(
+  resolvedKey: { name: string; value: string } | null,
+  parent: NodeJS.ProcessEnv = process.env,
+  passthrough: string[] = [],
+): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(parent)) {
+    if (v === undefined) continue;
+    if (isCredentialEnvVar(k)) continue;
+    out[k] = v;
+  }
+  for (const name of passthrough) {
+    const v = parent[name];
+    if (v !== undefined) out[name] = v;
+  }
+  if (resolvedKey) out.ZCODE_API_KEY = resolvedKey.value;
+  return out;
 }
 
 /**
@@ -149,15 +197,25 @@ export interface BootstrapOptions {
 export function bootstrapProvider(opts: BootstrapOptions): BootstrapResult {
   const env = opts.env ?? process.env;
   const warnings: BootstrapResult['warnings'] = [];
+  const passthrough = (env.ZCODE_MCP_CHILD_ENV_PASSTHROUGH ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  /** Every credential-shaped variable we are deliberately NOT handing to the child. */
+  const withheld = Object.keys(env).filter((k) => isCredentialEnvVar(k));
 
   if (opts.target) {
     const invalid = validateTarget(opts.target);
     if (invalid) {
       warnings.push({ code: 'provider_config_invalid', detail: invalid, impact: 'unreliable' });
-      return { source: 'none', childEnv: {}, configPath: null, warnings };
+      return { source: 'none', childEnv: buildChildEnv(null, env, passthrough) as Record<string, string>, configPath: null, warnings, withheldCredentials: withheld };
     }
 
-    const childEnv: Record<string, string> = { ZCODE_MODEL: opts.target.model };
+    const providerForKeys = opts.target.provider ?? splitModelRef(opts.target.model).provider ?? 'anthropic';
+    const childEnv: Record<string, string> = {
+      ...(buildChildEnv(resolveApiKey(providerForKeys, env), env, passthrough) as Record<string, string>),
+      ZCODE_MODEL: opts.target.model,
+    };
     if (opts.target.baseURL) {
       childEnv.ZCODE_BASE_URL = opts.target.baseURL;
       warnings.push({
@@ -170,33 +228,30 @@ export function bootstrapProvider(opts: BootstrapOptions): BootstrapResult {
       });
     }
 
-    const provider = opts.target.provider ?? splitModelRef(opts.target.model).provider ?? 'anthropic';
-    const key = resolveApiKey(provider, env);
-    if (key) {
-      childEnv.ZCODE_API_KEY = key.value;
-    } else {
+    const key = resolveApiKey(providerForKeys, env);
+    if (!key) {
       warnings.push({
         code: 'provider_key_missing',
         detail:
-          `No credential found for provider "${provider}". Set one of: ` +
-          `${apiKeyEnvCandidates(provider).join(', ')}. Model calls will fail with an auth error.`,
+          `No credential found for provider "${providerForKeys}". Set one of: ` +
+          `${apiKeyEnvCandidates(providerForKeys).join(', ')}. Model calls will fail with an auth error.`,
         impact: 'degraded',
       });
     }
 
-    return { source: 'environment', childEnv, configPath: null, warnings };
+    return { source: 'environment', childEnv, configPath: null, warnings, withheldCredentials: withheld };
   }
 
   // No target supplied: is the runtime already configured by a file we did not write?
   const paths = configPaths(opts.workspace, env);
   if (paths.projectDotZcode && configHasModel(readJsonIfPresent(paths.projectDotZcode))) {
-    return { source: 'existing-project-config', childEnv: {}, configPath: paths.projectDotZcode, warnings };
+    return { source: 'existing-project-config', childEnv: buildChildEnv(null, env, passthrough) as Record<string, string>, configPath: paths.projectDotZcode, warnings, withheldCredentials: withheld };
   }
   if (paths.projectZcodeJson && configHasModel(readJsonIfPresent(paths.projectZcodeJson))) {
-    return { source: 'existing-project-config', childEnv: {}, configPath: paths.projectZcodeJson, warnings };
+    return { source: 'existing-project-config', childEnv: buildChildEnv(null, env, passthrough) as Record<string, string>, configPath: paths.projectZcodeJson, warnings, withheldCredentials: withheld };
   }
   if (paths.user && configHasModel(readJsonIfPresent(paths.user))) {
-    return { source: 'user-config', childEnv: {}, configPath: paths.user, warnings };
+    return { source: 'user-config', childEnv: buildChildEnv(null, env, passthrough) as Record<string, string>, configPath: paths.user, warnings, withheldCredentials: withheld };
   }
 
   warnings.push({
@@ -208,7 +263,7 @@ export function bootstrapProvider(opts: BootstrapOptions): BootstrapResult {
       `by creating ${paths.user ?? '~/.zcode/cli/config.json'} with a "model" block yourself.`,
     impact: 'unreliable',
   });
-  return { source: 'none', childEnv: {}, configPath: null, warnings };
+  return { source: 'none', childEnv: buildChildEnv(null, env, passthrough) as Record<string, string>, configPath: null, warnings, withheldCredentials: withheld };
 }
 
 /** Read a provider target from this server's own environment. */

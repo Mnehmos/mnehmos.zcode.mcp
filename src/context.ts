@@ -13,6 +13,7 @@ import { AuditDb, openAuditDb } from './storage/db.js';
 import { attachEventBuffer, EventBuffer } from './zcode/events.js';
 import { policyFromEnv, type ApprovalPolicy } from './zcode/policy.js';
 import { RuntimeRegistry, type Runtime, type WorkspaceRef } from './zcode/registry.js';
+import { targetFromEnv, type ModelTarget } from './zcode/settings.js';
 import type { Envelope, RuntimeIdentity } from './envelope.js';
 import { redact } from './zcode/redact.js';
 
@@ -41,11 +42,20 @@ export class ServerContext extends EventEmitter {
   readonly dbError: string | null;
 
   private readonly byWorkspace = new Map<string, RuntimeContext>();
+  /**
+   * The provider newly spawned runtimes will use.
+   *
+   * Seeded from the environment; `zcode_models select scope=server` may change it for this process.
+   * It is NOT persisted, and existing runtimes keep their model — both of which the tool states
+   * rather than leaves for the caller to discover.
+   */
+  private active: ModelTarget | undefined;
 
   constructor(env: Env = loadEnv()) {
     super();
     this.env = env;
     this.dirs = ensureDirs(env);
+    this.active = targetFromEnv();
     const opened = openAuditDb(env.ZCODE_MCP_DB);
     this.db = opened;
     this.dbError = opened ? null : `could not open the audit database at ${env.ZCODE_MCP_DB}`;
@@ -54,7 +64,19 @@ export class ServerContext extends EventEmitter {
       wireDir: this.dirs.wire,
       stderrDir: this.dirs.stderr,
       onReady: (rt) => this.attachSubscribers(rt),
+      // Read per spawn, so a runtime started after a selection uses it.
+      targetProvider: () => this.active,
     });
+  }
+
+  /** The provider current for newly spawned runtimes. */
+  activeTarget(): ModelTarget | undefined {
+    return this.active;
+  }
+
+  /** Set the in-process default. Not persisted; the caller is told so. */
+  setActiveTarget(t: ModelTarget | undefined): void {
+    this.active = t;
   }
 
   /**

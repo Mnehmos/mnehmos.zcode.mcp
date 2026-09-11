@@ -29,10 +29,25 @@ export interface WorkspaceRef {
   workspaceIdentity?: string;
 }
 
-/** The audited rule. Used for cache lookup only. */
+/**
+ * The audited rule: `workspaceIdentity?.trim() || workspacePath`.
+ *
+ * The path component is normalised with `path.resolve`, because the same directory arrives spelled
+ * differently depending on who supplied it — an .env written with forward slashes, a caller passing
+ * a trailing separator, a relative path. ZCode reports the native form, and comparing raw strings
+ * made an identical workspace look like a mismatch.
+ *
+ * `workspaceIdentity` is NOT a path and is never resolved: it is an opaque key the desktop invents
+ * for remote workspaces.
+ */
 export function computeWorkspaceKey(ref: WorkspaceRef): string {
   const identity = ref.workspaceIdentity?.trim();
-  return identity && identity.length > 0 ? identity : ref.workspacePath;
+  if (identity && identity.length > 0) return identity;
+  try {
+    return path.resolve(ref.workspacePath);
+  } catch {
+    return ref.workspacePath;
+  }
 }
 
 export interface Runtime {
@@ -56,8 +71,11 @@ export interface RegistryOptions {
   env: Env;
   /** Override for tests: pretend this is the discovered bundle. */
   cliOverride?: string;
-  /** Override for tests: a provider target, instead of reading it from our environment. */
-  target?: ModelTarget;
+  /**
+   * The provider for newly spawned runtimes. A getter, not a value, so a runtime started after a
+   * `zcode_models select scope=server` picks up the new default without re-creating the registry.
+   */
+  targetProvider?: () => ModelTarget | undefined;
   /** Wire/ stderr directories, passed through to each transport. */
   wireDir: string;
   stderrDir: string;
@@ -138,7 +156,7 @@ export class RuntimeRegistry {
     // config walk-up, and the shell's working directory.
     const cwd = path.resolve(ref.workspacePath);
 
-    const target = this.opts.target ?? targetFromEnv();
+    const target = this.opts.targetProvider?.() ?? targetFromEnv();
     const settings = bootstrapProvider({ workspace: cwd, ...(target ? { target } : {}) });
 
     const runId = `${sanitize(workspaceKey)}-${Date.now()}`;
@@ -232,7 +250,15 @@ export class RuntimeRegistry {
       const sameWorkspace =
         reportedPath !== undefined && path.resolve(reportedPath) === path.resolve(runtime.workspacePath);
       if (!sameWorkspace) continue;
-      if (typeof reported === 'string' && reported.length > 0 && reported !== runtime.workspaceKey) {
+      // Compare canonically: ZCode may report a different separator from the one we were handed.
+      const canonical = (v: string) => {
+        try {
+          return path.resolve(v);
+        } catch {
+          return v;
+        }
+      };
+      if (typeof reported === 'string' && reported.length > 0 && canonical(reported) !== canonical(runtime.workspaceKey)) {
         runtime.keyMismatch = { computed: runtime.workspaceKey, reported };
       }
       break;

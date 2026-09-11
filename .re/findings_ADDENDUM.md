@@ -661,3 +661,88 @@ proving M2 spends nothing.
    user who has configured `model.main` in a config layer above priority 40 would be overriding
    themselves; `settings.ts` therefore checks for an existing file-sourced provider first and stays
    out of the way.
+
+---
+
+## A20. Provider bootstrap works; `session/create` does not persist (M4 blocked)
+
+Found while bringing the MCP up against a real DeepSeek provider. Two findings, one good and one
+that blocks the first real turn.
+
+### A20.1 The environment bootstrap is now proven against a live provider ✅
+
+With `.env` supplying `ZCODE_MODEL` / `ZCODE_BASE_URL` / `ZCODE_API_KEY`, a spawned runtime reports:
+
+```
+model.current = {"modelId":"deepseek-v4.1-flash-expires-on-0910","providerId":"deepseek"}
+```
+
+no `missing-model` sentinel, `modelCatalog.available` non-empty, and `session/create` accepts the
+session. So §A19 is confirmed end to end, not just against an unresolvable host.
+
+**DeepSeek speaks the Anthropic wire format** at `https://api.deepseek.com/anthropic`, which matters
+because the env path pins `kind` to `anthropic` (§A19). That is what lets one env mechanism cover
+z.ai, OpenRouter *and* DeepSeek — without it, DeepSeek's `openai-compatible` kind would have been
+inexpressible through the environment.
+
+### A20.2 🔴 `session/create` returns a session but never writes the `session` row
+
+CONFIRMED by isolation:
+
+| Attempt | Result |
+|---|---|
+| `session/create` with **no** model configured | `-32603 Model config is missing` — a model config is REQUIRED to create a session at all |
+| `session/create` with a model configured | returns a full session snapshot with an id, and `session/list` shows it |
+| the same id in `~/.zcode/cli/db/db.sqlite` | **absent** |
+
+So the session exists in the runtime's memory and in listings, but has no database row. The
+consequence is the next step:
+
+```
+v4/command -> {"status":"failed","reasonCode":"fault.command.executionFailed",
+               "message":"FOREIGN KEY constraint failed"}
+```
+
+and the runtime's own log names the operation:
+
+```
+event: session.model_selection.persist_failed | module: bootstrap
+msg:   Session model selection persistence failed
+error: FOREIGN KEY constraint failed
+```
+
+**Mechanism.** The only table with both a `session` foreign key and a model-selection event type is
+`session_entry` (`session_entry.session_id -> session.id ON DELETE CASCADE`; the audited event types
+include `runtime/model_selection`). The runtime writes the session's model selection into
+`session_entry` before the `session` row exists, so the insert violates the constraint, the v4
+command fails, and no turn can run.
+
+**Passing `persistence: "immediate"` does not change it.** The field is real — the runtime's own
+validator says it accepts exactly `"immediate" | "deferred"` — but it does not make the create
+synchronous. **`workspaceKey` IS required** (omitting it is `-32602`), so the param shape is right.
+
+**This is not a defect in the MCP.** The client sent valid params, the runtime accepted them, and the
+failure is reported faithfully with ZCode's own reason code — which is the honesty rule working.
+Two further observations support "ZCode-side":
+
+- a stray session created earlier (`sess_52f1146d`, `directory: C:\`, `project_id: proj_c`) IS
+  persisted, so creation *can* persist — just not through this path on this build;
+- sending a turn to a session that exists in the DB but belongs to a different workspace returns
+  `{"status":"rejected","reasonCode":"proto.sessionNotFound"}`, confirming sessions are scoped to the
+  resident workspace pool rather than to the database alone.
+
+**Next experiment.** The FK is on `session_entry`, so the question is what makes `session/create`
+write the row. Candidates, cheapest first: (a) supply a caller-generated `sessionId` (the audited
+param list includes it, suggesting the caller may be expected to mint it); (b) check whether the
+desktop's own create path sets a field the protocol path does not; (c) watch the wire while the
+desktop creates a session in the same workspace and diff the params against ours.
+
+### A20.3 Also learned
+
+| Fact | Detail |
+|---|---|
+| `session/create` requires a model config | without one it is `-32603 Model config is missing`, so a provider must be configured before any session work |
+| `v4/command` failure vocabulary | `failed` + `fault.command.executionFailed`; `rejected` + `proto.sessionNotFound`; earlier: `noop`, `stale`, `duplicate` — five distinct non-success outcomes the client must not collapse |
+| `-32022` on a raw client | the runtime's `session/requestRuntimePreferences` **client request** timing out because nothing answered it — proof that the policy module is load-bearing, observed from the other side |
+| Workspace keys need canonicalising | the same directory arriving with forward slashes (`.env`) and backslashes (ZCode) produced a false key-mismatch warning until `path.resolve` was applied to the path component |
+| The install model catalogue is nested | `endpoints: {baseURL, paths: {anthropic, openai-compatible}}`, unlike the flattened vendored copy. Reading it through the flat interface silently yielded `baseURL: undefined`, which looks like "this provider has no endpoint" rather than "we parsed it wrong" |
