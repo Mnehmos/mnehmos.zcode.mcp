@@ -14,6 +14,10 @@
  * verified on every exit path.
  */
 import * as path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 import { discoverRuntime, discoveryFailure, resolveNode, type Discovery, type Env } from '../schema/env.js';
 import { ZCodeProtocolClient } from './protocol.js';
@@ -57,6 +61,14 @@ export interface RegistryOptions {
   /** Wire/ stderr directories, passed through to each transport. */
   wireDir: string;
   stderrDir: string;
+  /**
+   * Called once a runtime is alive and has answered its first request, BEFORE acquire() returns.
+   *
+   * This is the hook that closes the deadlock window: the event buffer and the approval policy must
+   * be attached before anyone can start a turn, or an `interaction/*` request can arrive with
+   * nobody listening and park the turn in `waiting` forever.
+   */
+  onReady?: (runtime: Runtime) => void;
 }
 
 export class CapReachedError extends Error {
@@ -73,6 +85,8 @@ export class RuntimeRegistry {
   private readonly runtimes = new Map<string, Runtime>();
   private readonly spawning = new Map<string, Promise<Runtime>>();
   private disposed = false;
+  /** `zcode version` is asked once per registry, not once per runtime. */
+  private versionPromise: Promise<string | null> | null = null;
 
   constructor(private readonly opts: RegistryOptions) {}
 
@@ -167,7 +181,34 @@ export class RuntimeRegistry {
       await transport.disposeAndWait(2_000);
       throw err;
     }
+
+    // Attach subscribers before returning, so no caller can start a turn against a runtime with no
+    // policy listening.
+    this.opts.onReady?.(runtime);
     return runtime;
+  }
+
+  /**
+   * The runtime's own version, read once from `zcode version`.
+   *
+   * The envelope promises a version, and a caller diagnosing a protocol mismatch needs the real one
+   * rather than "unknown". This spawns a short-lived process with no model involvement, and the
+   * result is memoised for the life of the registry.
+   */
+  private runtimeVersion(discovery: Discovery): Promise<string | null> {
+    this.versionPromise ??= (async () => {
+      try {
+        const { stdout } = await execFileAsync(resolveNode(), [discovery.cli as string, 'version'], {
+          timeout: 30_000,
+          windowsHide: true,
+        });
+        const v = stdout.split(/\r?\n/).map((l) => l.trim()).find((l) => l.length > 0) ?? null;
+        return v && v.length > 0 ? v : null;
+      } catch {
+        return null;
+      }
+    })();
+    return this.versionPromise;
   }
 
   /**
@@ -175,28 +216,26 @@ export class RuntimeRegistry {
    * `session/list` works with empty params and is read-only, so it is safe for any caller.
    */
   private async verifyFirstContact(runtime: Runtime): Promise<void> {
-    const started = Date.now();
-    const result = await runtime.client.request<{ sessions?: Array<{ workspace?: { workspaceKey?: string } }> }>(
-      'session/list',
-      {},
-      { timeoutMs: this.opts.env.ZCODE_MCP_STARTUP_MS },
-    );
+    const result = await runtime.client.request<{
+      sessions?: Array<{ workspace?: { workspaceKey?: string; workspacePath?: string } }>;
+    }>('session/list', {}, { timeoutMs: this.opts.env.ZCODE_MCP_STARTUP_MS });
     runtime.lastUsedAt = Date.now();
-
-    // Protocol identity is asserted by the transport contract; version comes from doctor/version on
-    // demand. Record what we can establish cheaply, and cross-check the workspace key when a session
-    // for this workspace happens to be present.
     runtime.protocol = { name: 'ZCode Protocol', version: 1 };
-    void started;
+    runtime.runtimeVersion = await this.runtimeVersion(runtime.discovery);
 
+    // Cross-check the workspace key ONLY against a session that is in this workspace. Comparing
+    // against whichever session happens to be first would warn about an unrelated project, which is
+    // noise that trains a reader to ignore the warning.
     for (const s of result?.sessions ?? []) {
       const reported = s.workspace?.workspaceKey;
-      if (typeof reported === 'string' && reported.length > 0) {
-        if (reported !== runtime.workspaceKey) {
-          runtime.keyMismatch = { computed: runtime.workspaceKey, reported };
-        }
-        break;
+      const reportedPath = s.workspace?.workspacePath;
+      const sameWorkspace =
+        reportedPath !== undefined && path.resolve(reportedPath) === path.resolve(runtime.workspacePath);
+      if (!sameWorkspace) continue;
+      if (typeof reported === 'string' && reported.length > 0 && reported !== runtime.workspaceKey) {
+        runtime.keyMismatch = { computed: runtime.workspaceKey, reported };
       }
+      break;
     }
   }
 

@@ -21,6 +21,13 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import { fileURLToPath } from 'node:url';
 
 import { discoverRuntime, discoveryFailure, ensureDirs, loadEnv, resolveNode } from './schema/env.js';
+import { ServerContext } from './context.js';
+import type { Envelope } from './envelope.js';
+import { localEnvelope } from './envelope.js';
+import { statusDispatch } from './zcode/actions/status.js';
+import { sessionDispatch } from './zcode/actions/session.js';
+import { chatDispatch } from './zcode/actions/chat.js';
+import { approvalDispatch } from './zcode/actions/approval.js';
 import { createTransport } from './zcode/transport.js';
 import { TOOL_REGISTRY } from './schema/tools.js';
 import * as path from 'node:path';
@@ -128,7 +135,10 @@ async function selfTest(): Promise<number> {
 
 async function serve(): Promise<void> {
   const env = loadEnv();
-  ensureDirs(env);
+  const ctx = new ServerContext(env);
+  const log = (s: string) => process.stderr.write(`${s}\n`);
+
+  if (ctx.dbError) log(`warning: ${ctx.dbError} — calls will not be recorded`);
 
   const server = new Server(
     { name: 'mnehmos.zcode.mcp', version: VERSION },
@@ -147,21 +157,82 @@ async function serve(): Promise<void> {
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
-    // Dispatchers arrive per user story (see specs/001-zcode-control/tasks.md). Until an action
-    // has a dispatcher it must refuse clearly rather than pretend.
     const tool = TOOL_REGISTRY.find((t) => t.name === req.params.name);
-    if (!tool) {
-      throw new Error(`unknown tool: ${req.params.name}`);
+    if (!tool) throw new Error(`unknown tool: ${req.params.name}`);
+
+    const parsed = tool.schema.safeParse(req.params.arguments ?? {});
+    if (!parsed.success) {
+      // Schema-level refusal: no process is touched, which is the point of validating here.
+      const issues = parsed.error.issues
+        .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+        .join('; ');
+      const envelope = localEnvelope({ tool: tool.name, action: actionOf(req.params.arguments) }, null, {
+        ok: false,
+        errors: [`invalid arguments — ${issues}`],
+      });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(envelope, null, 2) }], isError: true };
     }
-    throw new Error(
-      `tool '${req.params.name}' is declared but not yet implemented. ` +
-        'See specs/001-zcode-control/tasks.md for the build order.',
-    );
+
+    const args = parsed.data as Record<string, unknown>;
+
+    try {
+      const envelope = await dispatch(ctx, tool.name, args);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(envelope, null, 2) }],
+        // An envelope that reports ok:false is a tool error even though the call succeeded.
+        ...(envelope.ok ? {} : { isError: true }),
+      };
+    } catch (err) {
+      const envelope = localEnvelope({ tool: tool.name, action: actionOf(args) }, null, {
+        ok: false,
+        errors: [err instanceof Error ? err.message : String(err)],
+      });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(envelope, null, 2) }], isError: true };
+    }
   });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  process.stderr.write(`mnehmos.zcode.mcp ${VERSION} listening on stdio (${TOOL_REGISTRY.length} tools declared)\n`);
+  log(`mnehmos.zcode.mcp ${VERSION} listening on stdio (${TOOL_REGISTRY.length} tools)`);
+
+  const shutdown = async (why: string) => {
+    log(`shutting down (${why})`);
+    await ctx.dispose();
+  };
+  process.on('SIGINT', () => void shutdown('SIGINT').then(() => process.exit(0)));
+  process.on('SIGTERM', () => void shutdown('SIGTERM').then(() => process.exit(0)));
+}
+
+function actionOf(args: unknown): string {
+  return args && typeof args === 'object' && 'action' in args && typeof (args as { action: unknown }).action === 'string'
+    ? (args as { action: string }).action
+    : 'unknown';
+}
+
+/**
+ * Route to a dispatcher. Tools without one refuse clearly rather than pretending — the build order
+ * is in specs/001-zcode-control/tasks.md.
+ */
+async function dispatch(ctx: ServerContext, tool: string, args: Record<string, unknown>): Promise<Envelope> {
+  switch (tool) {
+    case 'zcode_status':
+      return statusDispatch(ctx, args);
+    case 'zcode_session':
+      return sessionDispatch(ctx, args);
+    case 'zcode_chat':
+      return chatDispatch(ctx, args);
+    case 'zcode_approval':
+      return approvalDispatch(ctx, args);
+    default:
+      return localEnvelope({ tool, action: actionOf(args) }, null, {
+        ok: false,
+        errors: [
+          `tool '${tool}' is declared but not yet implemented. ` +
+            'Implemented: zcode_status, zcode_session, zcode_chat, zcode_approval. ' +
+            'See specs/001-zcode-control/tasks.md for the build order.',
+        ],
+      });
+  }
 }
 
 const arg = process.argv[2];
