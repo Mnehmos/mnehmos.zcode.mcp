@@ -1,8 +1,9 @@
-"""Delete a file whose name ends in a dot, on Windows.
+"""Find (and optionally delete) Windows files whose names cannot be addressed.
 
-A trailing dot is legal at the NTFS level but stripped by the Win32 path layer, so the ordinary API
-cannot address such a file: `exists()` returns False and `open()` throws, while a directory listing
-still shows the entry.
+A trailing dot or space is legal at the NTFS level but stripped by the Win32 path layer, so the
+ordinary API cannot reach such a file: `exists()` returns False and `open()` throws, while a
+directory listing shows the entry plainly. A backup written under such a name is a safety net that
+no restore can ever use, and it stays on disk until someone removes it through an NT path.
 
 Three traps, all of which produced a false result before this version:
   * the `\\\\?\\` prefix needs BACKSLASHES only — one '/' invalidates it
@@ -11,9 +12,10 @@ Three traps, all of which produced a false result before this version:
   * `exists()` is useless as a success check here for the same reason: it answers False for the
     stripped name no matter what happened. Only a directory listing is authoritative.
 
-So: read the name from `os.listdir` on the NT directory path and concatenate it verbatim.
-
-Run: python .re/purge_dotfile.py
+Usage:
+  python .re/purge_dotfile.py                      scan and purge ~/.zcode/cli (the config dir)
+  python .re/purge_dotfile.py --scan <root>        report only, recursively
+  python .re/purge_dotfile.py --purge <root>       delete recursively
 """
 import ctypes
 import os
@@ -21,10 +23,10 @@ import re
 import subprocess
 import sys
 
-CLI = os.path.expanduser("~/.zcode/cli")
-PREFIX = chr(92) * 2 + "?" + chr(92)          # \\?\
 BS = chr(92)
+PREFIX = BS * 2 + "?" + BS                      # \\?\
 QUOTE = chr(34)
+DEFAULT_ROOT = os.path.expanduser("~/.zcode/cli")
 
 SECRET_SHAPES = [
     re.compile(r"sk-[A-Za-z0-9_\-]{8,}"),
@@ -33,24 +35,38 @@ SECRET_SHAPES = [
 ]
 
 
-def nt_dir() -> str:
-    """The directory as an NT path. The directory name is well-formed, so abspath is safe here."""
-    return PREFIX + os.path.abspath(CLI).replace("/", BS)
+def nt(path: str) -> str:
+    """Absolute path with backslashes only. Safe for a directory whose own name is well-formed."""
+    return PREFIX + os.path.abspath(path).replace("/", BS)
 
 
-def nt_child(name: str) -> str:
-    """Join a RAW name from listdir without normalizing it — that is the whole point."""
-    return nt_dir() + BS + name
+def bad(name: str) -> bool:
+    return name.endswith(".") or name.endswith(" ")
 
 
-def listing() -> list[str]:
-    return os.listdir(nt_dir())
+def walk(root: str):
+    """Yield (dir, name) for every unaddressable entry under root.
 
-
-def bad_names() -> list[str]:
-    """Names Windows cannot address: ending in a dot or a space."""
-    return sorted(n for n in listing()
-                  if n.startswith("config.json") and (n.endswith(".") or n.endswith(" ")))
+    Recursion goes through NT paths and each name is joined RAW — the whole point is to never pass
+    the offending component through a normalizing function.
+    """
+    stack = [os.path.abspath(root)]
+    while stack:
+        d = stack.pop()
+        if not os.path.isdir(nt(d)):
+            continue
+        try:
+            names = os.listdir(nt(d))
+        except OSError:
+            continue
+        for n in names:
+            if bad(n):
+                yield d, n
+            else:
+                full = os.path.join(d, n)
+                # isdir on a well-formed name is fine; unaddressable ones never reach here.
+                if os.path.isdir(nt(full)):
+                    stack.append(full)
 
 
 def scan_for_secrets(path: str) -> None:
@@ -68,70 +84,64 @@ def scan_for_secrets(path: str) -> None:
         print("    no secret-shaped values")
 
 
-def try_delete(name: str) -> bool:
-    target = nt_child(name)
+def delete(d: str, name: str) -> bool:
+    target = nt(d) + BS + name
 
     def gone() -> bool:
-        return name not in listing()
+        try:
+            return name not in os.listdir(nt(d))
+        except OSError:
+            return False
 
-    try:
-        if ctypes.windll.kernel32.DeleteFileW(target) and gone():
-            print("    removed via DeleteFileW (NT path)")
-            return True
+    if ctypes.windll.kernel32.DeleteFileW(target) and gone():
+        return True
+    if ctypes.GetLastError() not in (0, 2):
         print(f"    DeleteFileW: error {ctypes.GetLastError()}")
-    except Exception as e:
-        print(f"    DeleteFileW: {type(e).__name__}: {e}")
-
-    try:
-        os.remove(target)
-        if gone():
-            print("    removed via os.remove (NT path)")
-            return True
-    except Exception as e:
-        print(f"    os.remove: {type(e).__name__}: {e}")
-
-    # cmd's `del` performs its own wildcard matching, which can reach a name without spelling it.
     try:
         subprocess.run(f"del /f /q {QUOTE}{target}{QUOTE}", shell=True, capture_output=True, text=True)
         if gone():
-            print("    removed via cmd del")
             return True
-        print("    cmd del: no effect")
-    except Exception as e:
-        print(f"    cmd del: {type(e).__name__}: {e}")
-
+    except OSError:
+        pass
     return False
 
 
-def main() -> int:
-    print("=== config.json backups on disk ===")
-    for n in sorted(listing()):
-        if n.startswith("config.json.bak-"):
-            mark = "  <-- ends in dot/space" if (n.endswith(".") or n.endswith(" ")) else ""
-            print(f"  {n!r}{mark}")
+def main(argv: list[str]) -> int:
+    mode, root = "purge", DEFAULT_ROOT
+    if len(argv) > 1:
+        if argv[1] not in ("--scan", "--purge"):
+            print(__doc__)
+            return 2
+        mode = "scan" if argv[1] == "--scan" else "purge"
+        if len(argv) > 2:
+            root = argv[2]
 
-    bad = bad_names()
-    if not bad:
-        print("\nnothing to clean")
+    print(f"=== {mode} {root} ===")
+    found = sorted(walk(root))
+    if not found:
+        print("  no unaddressable names")
         return 0
 
-    print(f"\n=== purging {len(bad)} ===")
-    for name in bad:
-        print(f"  {name!r} ({os.path.getsize(nt_child(name))} bytes)")
-        scan_for_secrets(nt_child(name))
-        if not try_delete(name):
+    failures = 0
+    for d, name in found:
+        print(f"  {os.path.join(d, name)!r}")
+        if mode == "scan":
+            continue
+        print(f"    {os.path.getsize(nt(d) + BS + name)} bytes")
+        scan_for_secrets(nt(d) + BS + name)
+        if delete(d, name):
+            print("    removed")
+        else:
             print("    COULD NOT REMOVE")
-            return 1
+            failures += 1
 
-    # Authoritative check: the directory listing, not exists().
-    print("\n=== verify (directory listing) ===")
-    remaining = bad_names()
-    if remaining:
-        print(f"  STILL PRESENT: {remaining}")
-        return 1
-    print("  gone; no config.json backup name ends in a dot or a space")
-    return 0
+    # Authoritative check: a fresh listing, never exists().
+    remaining = sorted(walk(root))
+    print(f"=== verify: {len(remaining)} remaining ===")
+    for d, name in remaining:
+        print(f"  {os.path.join(d, name)!r}")
+    return 1 if (failures or remaining) else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv))
