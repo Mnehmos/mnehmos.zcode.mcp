@@ -143,6 +143,25 @@ export function normalizeModelRef(ref: string): { provider: string | null; model
   return { provider: ref.slice(0, i), model: ref.slice(i + 1) };
 }
 
+/**
+ * The `ModelRef` object the protocol expects, from the string form a caller writes.
+ *
+ * `session/setModel` does NOT take a string. Passing one is rejected with
+ * `-32602 Invalid params — model: expected object, received string`, which is how this was found:
+ * `zcode_models select scope:"session"` and `zcode_session set_model` were both sending
+ * `"deepseek/deepseek-v4-pro"` where the runtime wanted `{modelId, providerId}`.
+ *
+ * The provider is required and cannot be guessed — provider ids are UUIDs in a user's config
+ * (`f4f09303-…`), so a bare model id is genuinely ambiguous. Returning null rather than inventing
+ * one lets the caller refuse with a message that says what to pass.
+ */
+export function modelRefObject(ref: string, provider?: string | null): { modelId: string; providerId: string } | null {
+  const split = normalizeModelRef(ref);
+  const providerId = provider || split.provider;
+  if (!providerId || !split.model) return null;
+  return { modelId: split.model, providerId };
+}
+
 /** Find a provider by id, tolerating the `builtin:` prefix used in config files. */
 export function findProvider(catalog: ModelCatalog, id: string): CatalogProvider | null {
   const want = id.replace(/^builtin:/, '').toLowerCase();

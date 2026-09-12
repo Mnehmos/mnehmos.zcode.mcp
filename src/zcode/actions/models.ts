@@ -23,6 +23,7 @@ import {
   findModels,
   findProvider,
   loadModelCatalog,
+  modelRefObject,
   normalizeModelRef,
   type CatalogModel,
   type CatalogProvider,
@@ -313,11 +314,14 @@ async function select(
       );
       return finish(ctx, o, runId);
     }
-    const key = resolveApiKey(provider, process.env);
+    // The hint matters: without it the registry fallback has nothing to match on, so a provider
+    // whose key IS configured would be reported as missing. The warning below must not cry wolf.
+    const key = resolveApiKey(provider, process.env, { baseURL, model: modelId });
     if (!key) {
       o.warn(
         'provider_key_missing',
-        `no credential for "${provider}" (tried ${apiKeyEnvCandidates(provider).join(', ')})`,
+        `no credential for "${provider}" in the environment or ZCode's provider registry ` +
+          `(env names tried: ${apiKeyEnvCandidates(provider).join(', ')})`,
         'degraded',
       );
     }
@@ -368,14 +372,24 @@ async function select(
     o.fail('scope "session" needs a session_id');
     return finish(ctx, o, runId);
   }
+  const refObject = modelRefObject(ref, provider);
+  if (!refObject) {
+    o.fail(
+      `scope "session" needs a provider: pass "<provider>/<model>" (got "${ref}"). Provider ids are ` +
+        "UUIDs in ZCode's config, so a bare model id cannot be resolved to one.",
+    );
+    return finish(ctx, o, runId);
+  }
   const t = Date.now();
-  await runtime.client.request('session/setModel', { sessionId, model: ref });
+  // The protocol wants a ModelRef object here, not the string form: sending a string is rejected
+  // with `-32602 Invalid params — model: expected object, received string`.
+  await runtime.client.request('session/setModel', { sessionId, model: refObject });
   o.method('session/setModel', true, Date.now() - t);
   const t2 = Date.now();
   const read = await runtime.client.request<{ model?: ModelRef }>('session/read', { sessionId });
   o.method('session/read', true, Date.now() - t2);
   const seen = read?.model ?? null;
-  const agrees = seen ? JSON.stringify(seen).includes(modelId) : false;
+  const agrees = seen ? JSON.stringify(seen).includes(refObject.modelId) : false;
   o.readBack(agrees, agrees ? undefined : `requested ${ref}, session reports ${JSON.stringify(seen)}`);
   o.result({ scope: 'session', session_id: sessionId, requested: ref, observed: seen });
   return finish(ctx, o, runId);
