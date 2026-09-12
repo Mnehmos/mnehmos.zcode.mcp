@@ -191,6 +191,27 @@ un-analysed `hooks trust` family). The two that mattered most resolved decisivel
   `credentials.json` is AES-256-GCM but with a key **derived from the machine's own identity** when
   `ZCODE_CREDENTIAL_SECRET` is unset, so it is obfuscated rather than truly encrypted.
 
+## Giving it a model
+
+**Configure your provider in ZCode — that is the whole setup.** The model menu writes
+`~/.zcode/v2/config.json`, and this server reads the credential for the provider it is about to call
+from there. Nothing needs to be duplicated anywhere, and no key has to be pasted a second time.
+
+Resolution order, and the environment always wins:
+
+| source | when |
+|---|---|
+| `DEEPSEEK_API_KEY` / `ANTHROPIC_API_KEY` / `ZCODE_API_KEY` in this server's environment | you set one deliberately — it wins |
+| the matching provider in `~/.zcode/v2/config.json` | the fallback, so the model menu alone is enough |
+
+A key that came from the registry is reported as `provider_key_from_registry` (advisory) naming the
+provider, so which credential is being spent is never a mystery. Point the server at a model and
+endpoint with `ZCODE_MCP_MODEL` and `ZCODE_MCP_BASE_URL`.
+
+Two things this deliberately does **not** do: it never opens `~/.zcode/v2/credentials.json` (that
+file has a machine-derivable cipher and is off-limits by policy, not by difficulty), and it never puts
+a key in a tool result, a log line, or a warning — only the provider's id.
+
 ## Two things worth doing on your machine
 
 1. **Set `ZCODE_CREDENTIAL_SECRET`.** Without it, the key protecting `~/.zcode/v2/credentials.json` is

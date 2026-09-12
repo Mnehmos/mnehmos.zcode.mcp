@@ -59,7 +59,7 @@ specs/001-zcode-control/         spec → plan → research → data-model → c
 | Advertised-but-unparsed flags | `--settings`, `--max-turns`, `--allowed-tools`, `--permission-mode`, `--allow-main-worktree-yolo` |
 | Headless output | `-p "…" --output-format text\|json\|stream-json`; `stream-json` ends with a `{"type":"result",…}` line |
 | Provider config | top-level `model` key; project config beats user config; key via env (`ZCODE_API_KEY`, `ANTHROPIC_API_KEY`, …) |
-| Provider config does NOT reach a spawned runtime | A runtime this server spawns ignores `~/.zcode/v2/config.json` entirely — measured with 8 providers, including a live key, configured there: it still reports `model.current = {modelId:"missing-model",providerId:"zcode-unconfigured"}` and an empty `modelCatalog`. Credential provisioning is **environment-only**, and ZCode does not export its provider registry to MCP children (its own stale env is what reaches them). Model *selection* is ZCode's; the *credential* is still ours to supply (addendum §A25) |
+| Provider config does NOT reach a spawned runtime | A runtime this server spawns ignores `~/.zcode/v2/config.json` entirely — measured with 8 providers, including a live key, configured there: it still reports `model.current = {modelId:"missing-model",providerId:"zcode-unconfigured"}`. Credential provisioning is the *environment* of the process we spawn. **Since A27 the server reads that registry itself** (`resolveApiKey` → `keyFromProviderRegistry`) and copies the matching key into the child env, so a user only has to configure their model in ZCode. Environment still wins when set. Matching is scored: endpoint prefix relationship first, then the model list — provider ids are UUIDs, and both naive matches (URL equality; the un-split `provider/model` ref) silently find nothing |
 | No local listener on the desktop | The desktop opens **no** HTTP/WS server. Web Remote Control is an outbound `ws` client to `wss://zcode.z.ai/ws`; the desktop↔host channel is tunnelled through that relay in **binary** `rpc-frame` fragments — a different protocol from ZCode Protocol v4. Stdio to an owned runtime is the only local control boundary (addendum §A16) |
 | Remote *server* surface | a real network-reachable ZCode Protocol host RPC exists, but only for remote ZCode servers: `GET /api/server-info` → `POST /api/rpc-host-capability` → `wss://<base>/ws/host?token=…` with `Authorization: Bearer` + `x-zcode-rpc-host-capability`. Out of scope for v1 |
 | Credential cipher is weak | `~/.zcode/v2/credentials.json` is AES-256-GCM, but with `ZCODE_CREDENTIAL_SECRET` unset the key falls back to a value **derived from the machine's own identity** rather than from a user secret — reproducible by anyone holding a copy of the file. **Report it; never use it.** `config.json` provider keys are plaintext |
@@ -96,15 +96,18 @@ specs/001-zcode-control/         spec → plan → research → data-model → c
   never hand-roll `copyFileSync`. If such a file ever appears again: `.re/purge_dotfile.py`
   (addendum A24).
 - **A credential is not configured until the call it exists for succeeds from where it is resolved.**
-  Three versions of this trap have now cost real time: the key was updated in `.env` while the
-  process resolved a *different* source; the key was correct in ZCode's model-management config,
-  which a spawned runtime *never reads*; and the key was present, unmodified, and **revoked at the
-  issuer** (200 with a real balance, then 401 an hour later, nothing local changed). Fingerprinting
-  tells you *which* credential you have — only a real call tells you it is alive. `.re/probe_keys.mjs`
-  and `.re/register_provider_env.py` choose keys by calling, and print no values. Where a key goes for
-  the registered server: `mcp.servers.zcode.env` in `~/.zcode/cli/config.json` (and both profile
-  copies, or `mcp-profile.cmd` reverts it). `.env` no longer exists on this machine — it was only ever
-  for `npm run start:env`, which no workflow here uses.
+  Three variants of this trap have cost real time: the key was updated in `.env` while the process
+  resolved a *different* source; the key was correct in ZCode's model-management config, which a
+  spawned runtime *never reads*; and the key was present, unmodified, and **revoked at the issuer**
+  (200 with a real balance, then 401 an hour later, nothing local changed). Fingerprinting tells you
+  *which* credential you have — only a real call tells you it is alive. `resolveApiKey` now falls back
+  to the registry so the model menu is the only setup step; override it with `DEEPSEEK_API_KEY` /
+  `ANTHROPIC_API_KEY` / `ZCODE_API_KEY`, which win. `.re/probe_keys.mjs`,
+  `.re/register_provider_env.py` and `.re/mcp_call.mjs` exist for this and print no values.
+- **A state read that echoes your input is not a read-back.** `zcode_models current` reported
+  `providerId: "deepseek"` while the provider had **no key** — it was returning `ZCODE_MODEL`, which
+  we had just set. Only the real turn failed. When a value can come from the thing you just
+  configured, the only honest check is the operation that would fail without it.
 
 ## Adding a tool action
 

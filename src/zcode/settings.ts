@@ -1,9 +1,15 @@
 /**
- * Provider bootstrap: give a spawned runtime a model provider, using ONLY environment variables.
+ * Provider bootstrap: give a spawned runtime a model provider.
  *
- * Why this is needed (audited, CONFIRMED): a bare `app-server` has no provider and no credentials.
- * It reports `model.current = {modelId:"missing-model", providerId:"zcode-unconfigured"}` and
- * `zcode --prompt` fails with "Model config is missing". The desktop owns the provider registry
+ * Two sources, in order: this process's environment, then ZCode's own provider registry when the
+ * environment supplies nothing (`resolveApiKey`). The environment wins because it is the explicit
+ * act. The registry fallback exists because the runtime reads no config of its own, so a user who
+ * configured their model in ZCode — which should be the only place they have to — would otherwise
+ * have to enter the key a second time. See A25/A26 in `.re/findings_ADDENDUM.md`.
+ *
+ * Why any of this is needed (audited, CONFIRMED): a bare `app-server` has no provider and no
+ * credentials. It reports `model.current = {modelId:"missing-model", providerId:"zcode-unconfigured"}`
+ * and `zcode --prompt` fails with "Model config is missing". The desktop owns the provider registry
  * and pushes it into its own children; we are not the desktop, so we must supply one.
  *
  * How (found by static analysis, then PROVEN by observing the error change):
@@ -29,6 +35,7 @@
  * to any file, never logged, and never echoed in a result.
  */
 import * as fs from 'node:fs';
+import { homedir } from 'node:os';
 import * as path from 'node:path';
 
 import { isSensitiveKey } from './redact.js';
@@ -118,17 +125,109 @@ export function buildChildEnv(
   return out;
 }
 
+export interface RegistryHint {
+  /** The endpoint the runtime is about to call — the strongest match, since the key must belong to it. */
+  baseURL?: string;
+  /** The model id, checked against each provider's own model list. A weaker signal than the URL. */
+  model?: string;
+}
+
+interface RegistryProvider {
+  enabled?: boolean;
+  options?: { apiKey?: string; baseURL?: string };
+  models?: Record<string, unknown>;
+}
+
+const normURL = (u?: string): string => (u ?? '').trim().replace(/\/+$/, '').toLowerCase();
+
 /**
- * Pick a key from OUR OWN process environment. We never read ZCode's credential store: values there
- * are AES-256-GCM with a machine-derivable fallback key, which is exactly the sort of thing
- * Constitution Article IV forbids touching even though it is technically possible.
+ * How strongly two endpoints are the same provider: 3 exact, 2 one is a path-prefix of the other,
+ * 0 unrelated.
+ *
+ * Exact equality is not enough. A registry entry for DeepSeek stores `https://api.deepseek.com`
+ * while the runtime is configured with `https://api.deepseek.com/anthropic` — the same provider, one
+ * path segment apart, and an equality test silently finds nothing.
  */
-export function resolveApiKey(provider: string, env: NodeJS.ProcessEnv = process.env): { name: string; value: string } | null {
+function urlScore(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 3;
+  const atBoundary = (short: string, long: string): boolean =>
+    long.startsWith(short.endsWith('/') ? short : `${short}/`);
+  return atBoundary(a, b) || atBoundary(b, a) ? 2 : 0;
+}
+
+/**
+ * A credential from ZCode's own provider registry, for when the environment did not supply one.
+ *
+ * Why this exists: a spawned runtime reads NO config — not even ZCode's own provider registry (A25).
+ * So a user who configured their model in the model menu, which is the one place they should have to
+ * configure it, had to enter the key a SECOND time somewhere this server could see. That duplication
+ * was the whole reason setup was confusing. Reading it here removes the second entry.
+ *
+ * Deliberately narrow:
+ *   - read-only, and only `options.apiKey` for the provider that matches
+ *   - `~/.zcode/v2/credentials.json` is never touched — a different file, a machine-derivable cipher,
+ *     and Constitution Article IV keeps it off-limits regardless of feasibility
+ *   - the value never reaches a log, an envelope or a tool result; only `name` does, and `name` is a
+ *     label, not the secret
+ *
+ * Matching is scored, endpoint first, because provider ids are UUIDs or `builtin:*` and the
+ * `deepseek` in `deepseek/…` matches nothing. Both signals were got wrong the first time: the URL
+ * needs a prefix relationship, not equality, and the model must be compared WITHOUT its provider
+ * prefix (the registry lists `deepseek-v4.1-…`, the ref is `deepseek/deepseek-v4.1-…`).
+ */
+export function keyFromProviderRegistry(
+  hint: RegistryHint,
+  home: string = homedir(),
+): { name: string; value: string } | null {
+  let cfg: { provider?: Record<string, RegistryProvider> };
+  try {
+    const p = path.join(home, '.zcode', 'v2', 'config.json');
+    if (!fs.existsSync(p)) return null;
+    cfg = JSON.parse(fs.readFileSync(p, 'utf8')) as typeof cfg;
+  } catch {
+    return null; // unreadable or malformed is simply "no key here", never a thrown error
+  }
+
+  const wanted = normURL(hint.baseURL);
+  const candidates = Object.entries(cfg.provider ?? {})
+    .filter(([, v]) => v?.enabled !== false && typeof v?.options?.apiKey === 'string' && v.options.apiKey.trim() !== '')
+    .map(([id, v]) => {
+      const url = urlScore(wanted, normURL(v.options?.baseURL));
+      const model = hint.model && v.models && hint.model in v.models ? 1 : 0;
+      // URL is weighted far above the model list: the key has to belong to the endpoint we are about
+      // to call, whereas a provider may serve a model it does not advertise. The model list is what
+      // rescues a machine whose registry stores an endpoint we cannot relate to ours.
+      return { id, key: v.options!.apiKey!.trim(), score: url * 10 + model };
+    })
+    .filter((c) => c.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  const hit = candidates[0];
+  if (!hit) return null;
+  return { name: `zcode provider registry:${hit.id}`, value: hit.key };
+}
+
+/** True when a key came from the registry rather than the environment, so callers can say so. */
+export const isRegistryKey = (k: { name: string } | null): boolean =>
+  !!k && k.name.startsWith('zcode provider registry:');
+
+/**
+ * Pick a key: our own process environment first, then ZCode's provider registry.
+ *
+ * The environment wins because it is the explicit act — a caller who set `DEEPSEEK_API_KEY` meant
+ * that one, and it must keep working on a machine where the registry holds something different.
+ */
+export function resolveApiKey(
+  provider: string,
+  env: NodeJS.ProcessEnv = process.env,
+  hint: RegistryHint = {},
+): { name: string; value: string } | null {
   for (const name of apiKeyEnvCandidates(provider)) {
     const v = env[name];
     if (v && v.trim()) return { name, value: v.trim() };
   }
-  return null;
+  return keyFromProviderRegistry(hint);
 }
 
 /** `provider/model` is split by the agent itself; we do the same to derive a key-var name. */
@@ -212,8 +311,11 @@ export function bootstrapProvider(opts: BootstrapOptions): BootstrapResult {
     }
 
     const providerForKeys = opts.target.provider ?? splitModelRef(opts.target.model).provider ?? 'anthropic';
+    // The registry lists bare ids (`deepseek-v4.1-…`), never `provider/model`, so the hint uses the
+    // split id. Passing the raw ref matches nothing — that was bug #2 in this fallback.
+    const hint = { baseURL: opts.target.baseURL, model: splitModelRef(opts.target.model).model };
     const childEnv: Record<string, string> = {
-      ...(buildChildEnv(resolveApiKey(providerForKeys, env), env, passthrough) as Record<string, string>),
+      ...(buildChildEnv(resolveApiKey(providerForKeys, env, hint), env, passthrough) as Record<string, string>),
       ZCODE_MODEL: opts.target.model,
     };
     if (opts.target.baseURL) {
@@ -228,14 +330,26 @@ export function bootstrapProvider(opts: BootstrapOptions): BootstrapResult {
       });
     }
 
-    const key = resolveApiKey(providerForKeys, env);
+    const key = resolveApiKey(providerForKeys, env, hint);
     if (!key) {
       warnings.push({
         code: 'provider_key_missing',
         detail:
           `No credential found for provider "${providerForKeys}". Set one of: ` +
-          `${apiKeyEnvCandidates(providerForKeys).join(', ')}. Model calls will fail with an auth error.`,
+          `${apiKeyEnvCandidates(providerForKeys).join(', ')}, or configure the provider in ZCode ` +
+          `itself. Model calls will fail with an auth error.`,
         impact: 'degraded',
+      });
+    } else if (isRegistryKey(key)) {
+      // Say where it came from. A key the caller did not set, that we found in a file, is worth
+      // naming — otherwise "it works" hides which credential is being spent.
+      warnings.push({
+        code: 'provider_key_from_registry',
+        detail:
+          `No credential in the environment for "${providerForKeys}"; using the one configured in ` +
+          `ZCode's provider registry (${key.name.slice('zcode provider registry:'.length)}). ` +
+          `Set ${apiKeyEnvCandidates(providerForKeys)[0]} to choose a different one.`,
+        impact: 'advisory',
       });
     }
 
