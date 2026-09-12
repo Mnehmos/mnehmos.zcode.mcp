@@ -37,7 +37,7 @@ own protocol — never by simulating a user.
 | # | Finding | Consequence |
 |---|---|---|
 | 1 | The agent runtime is spawnable and scriptable by an unrelated process, over stdio | Rating **A** control surface; no UI automation anywhere |
-| 2 | The runtime needs **its own** model-provider config and does not inherit the desktop's | The MCP must provision a provider — and can pass the API key by **environment**, so no secret touches disk |
+| 2 | The runtime needs **its own** model-provider config and does not inherit the desktop's — not even the providers configured in ZCode's own model management | The MCP must provision a provider, and the key reaches it by **environment**. The key itself has to be placed in the environment of whatever launches this server; this server never generates a file containing one, and never reads ZCode's credential store |
 | 3 | Owning the runtime makes us its **only client**, so it sends *us* the approval requests | A default-**deny** policy module is mandatory, not a nicety, or turns deadlock |
 | 4 | `v4/command` returns **admission**, not completion | The chat tool must observe a terminal turn event before claiming success |
 | 5 | **ZCode has no editor document service** | "get active editor" / "replace selection" are not buildable; file mutation goes through the agent's own tools, which is the only path that produces checkpoints and participates in rewind |
@@ -147,8 +147,11 @@ From `.specify/memory/constitution.md`:
 2. **No success without read-back.** Every mutating action re-reads and fails on contradiction.
    Admission is not completion. `noop` is not success.
 3. **Schemas are contracts.** zod before spawn; protocol version asserted at first contact; loud on drift.
-4. **Secret handling.** API keys travel by environment, never a generated file; redaction is on by
-   default; ZCode's credential store is never read or written.
+4. **Secret handling.** API keys travel by environment, never a file this server generates; redaction
+   is on by default; ZCode's credential store is never read or written. Where the key physically
+   lives is the launcher's business — a `.env` for `npm run start:env`, or the `env` block of the MCP
+   client's registration for a client that starts the server itself. The one place that does **not**
+   work is ZCode's model-management config, which a spawned runtime does not read.
 5. **Deny by default.** The approval policy defaults to deny; blanket auto-approval is prohibited.
 6. **Bounded resources.** Timeouts, owned process groups, hard kill on every path, no orphans.
 7. **The repo is the memory.** Audit row per call, hashed artifacts, evidence labels on every claim.

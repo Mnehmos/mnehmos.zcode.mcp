@@ -95,11 +95,16 @@ specs/001-zcode-control/         spec → plan → research → data-model → c
   `src/zcode/backup.ts`**, which reads the copy back byte-identical before the caller may write;
   never hand-roll `copyFileSync`. If such a file ever appears again: `.re/purge_dotfile.py`
   (addendum A24).
-- **A rotated key is not rotated until the value the *process* resolves authenticates.** `.env` is
-  read only by `npm run start:env`, so the agent environment and `.env` can hold different values
-  under the same name — the previous OpenRouter key was superseded in `.env` and still dead in the
-  agent env, which is the one a tool running inside ZCode resolves. Fingerprint each source
-  separately; `.re/probe_keys.mjs` does and prints no values.
+- **A credential is not configured until the call it exists for succeeds from where it is resolved.**
+  Three versions of this trap have now cost real time: the key was updated in `.env` while the
+  process resolved a *different* source; the key was correct in ZCode's model-management config,
+  which a spawned runtime *never reads*; and the key was present, unmodified, and **revoked at the
+  issuer** (200 with a real balance, then 401 an hour later, nothing local changed). Fingerprinting
+  tells you *which* credential you have — only a real call tells you it is alive. `.re/probe_keys.mjs`
+  and `.re/register_provider_env.py` choose keys by calling, and print no values. Where a key goes for
+  the registered server: `mcp.servers.zcode.env` in `~/.zcode/cli/config.json` (and both profile
+  copies, or `mcp-profile.cmd` reverts it). `.env` no longer exists on this machine — it was only ever
+  for `npm run start:env`, which no workflow here uses.
 
 ## Adding a tool action
 
