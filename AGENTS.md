@@ -118,7 +118,8 @@ specs/001-zcode-control/         spec → plan → research → data-model → c
    If you cannot write a read-back for a mutating action, do not ship it as a typed action — put it
    behind `zcode_protocol` where it is explicitly marked `unreliable`.
 3. Implement the dispatcher in `src/zcode/actions/<tool>.ts`.
-4. Add a schema case to `test/schema.test.ts` and a unit test for any pure logic.
+4. Add a case to `test/toolsurface.test.ts` (it validates the whole published list against the MCP
+   SDK's own schema — a tool the client refuses is worth nothing) and a unit test for any pure logic.
 5. If the action mutates, extend the opt-in integration suite and prove the read-back.
 6. Update the tool table in `README.md`.
 
