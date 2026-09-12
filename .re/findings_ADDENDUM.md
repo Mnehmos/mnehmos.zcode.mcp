@@ -1424,3 +1424,66 @@ incomplete — it also has to be a workspace with no remembered model.
 3. **`select scope=server` resolved its credential without a hint**, so the registry fallback had
    nothing to match on and reported `credential_var: null` with a `provider_key_missing` warning for a
    provider whose key was configured. Now `credential_var: "zcode provider registry:f4f09303-…"`.
+
+## A31. Real-time model switching works — and our tool schema was the only thing stopping it
+
+**CONFIRMED end to end.** A model can be switched live, in a running runtime, with no respawn and no
+rebuild. The rebuild was only ever needed for a code fix.
+
+### The sequence, through the tools
+
+```
+before   available=1  ["deepseek-v4.1-flash-expires-on-0910"]
+zcode_settings upsert_provider   ok=true  selectable_models=["deepseek-v4-flash","deepseek-v4-pro"]
+after    available=2  ["deepseek-v4-flash","deepseek-v4-pro"]
+zcode_models select scope=server -> deepseek/deepseek-v4-pro
+zcode_chat send                  outcome=completed  text="deepseek-v4-pro"
+```
+
+The model answered with the id it had just been switched to. `.re/demo_live_switch.mjs` reproduces it.
+
+### What made this look impossible at first
+
+`workspace/upsertModelProvider` was rejected, and the catalogue did not widen, so the first conclusion
+was "a running runtime's catalogue cannot be changed — the host pushes it". **That was wrong, and the
+error was mine twice over:**
+
+1. `zcode_settings upsert_provider` was **gated off** by default (`ZCODE_MCP_ALLOW_PROVIDER_EDIT=1`),
+   and the refusal was our own guard, not the runtime's. The protocol method was never called.
+2. Once past the gate, the call still failed — because our `ProviderBlock` was **invented**, requiring
+   `{provider, model}` where the runtime requires `{providerId, kind, models: [{modelId}]}` and is
+   **strict**, so the two keys we sent were a hard rejection:
+
+```
+Invalid params — provider.providerId: expected string, received undefined;
+                 provider.models: expected array, received undefined;
+                 provider: Unrecognized keys: "provider", "model"
+```
+
+The action could never have succeeded for any input. Read from the runtime bundle:
+
+```js
+// upsertModelProvider
+provider: f.object({
+  providerId: pe, kind: cEt, models: f.array(mEt).min(1),
+  apiFormat, label, source, baseURL, apiKey, apiKeyRequired,
+  headers, providerOptions, logoUrl, modelsDevProviderId
+}).strict()
+
+// the model entry
+mEt = f.object({ modelId: pe, label?, description?, contextWindow?, maxOutputTokens?,
+                 reasoning?, reasoningProfile?, supportsImages?, supportsPdf?, supportsVideo?,
+                 supportsTools?, supportsStructuredOutput? })
+```
+
+`ProviderBlock` now matches it, and the read-back reads `settings.model.available` — the list this
+action exists to widen — instead of `modelCatalog.providers.length`, which does not move when the
+upsert replaces a provider that is already there. The old code declared the result
+`read_back_unavailable`; it was available all along.
+
+### The lesson, again
+
+Every wrong conclusion in this session came from inferring instead of measuring: that the catalogue
+could not be widened, that the tools were loading, that a model switch had worked. Every correction
+came from an operation that could fail. `probe_*.mjs` scripts exist for this and should be reached for
+before any claim about what the runtime can do.
