@@ -12,12 +12,13 @@
  * model's context. That is not something a caller can opt out of; `ZCODE_MCP_REDACT` relaxes wire
  * logging, never this.
  */
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import type { ServerContext } from '../../context.js';
 import type { Envelope } from '../../envelope.js';
+import { takeBackup } from '../backup.js';
 import { isSensitiveKey, REDACTED } from '../redact.js';
 import { acquireOrFail, describe, finish, newRunId, outcome, read, refOf, resolveWorkspace, workspaceRequired, write } from './_shared.js';
 
@@ -229,8 +230,15 @@ function settingsSetDesktop(
     // forward-migrates this file, so dropping keys we do not recognise would corrupt its state.
     const current = existsSync(p) ? (JSON.parse(readFileSync(p, 'utf8')) as Record<string, unknown>) : {};
     const merged = { ...current, ...patch };
-    const backup = `${p}.bak-mcp-${new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15)}`;
-    if (existsSync(p)) copyFileSync(p, backup);
+    // A backup proven restorable, or no write at all. The stamp here used to be
+    // `iso.replace(/[-:T]/g,'').slice(0,15)`, which ends in the millisecond dot — a name Windows
+    // creates but cannot open. See src/zcode/backup.ts.
+    const taken = takeBackup(p, 'mcp');
+    if (!taken.ok) {
+      o.fail(`${taken.reason}; refusing to modify ${p}`);
+      return finish(ctx, o, runId);
+    }
+    const backup = taken.path;
     writeFileSync(p, `${JSON.stringify(merged, null, 2)}\n`, 'utf8');
 
     const verify = JSON.parse(readFileSync(p, 'utf8')) as Record<string, unknown>;

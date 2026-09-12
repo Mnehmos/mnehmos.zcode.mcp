@@ -991,3 +991,87 @@ is worth stating plainly: an owned runtime is a *subset* of what the desktop can
 
 The read surface that matters is unaffected. Sessions, messages, rows, models, usage, plugins, MCP
 inventory and real turns all work; only the diff/rewind-record view and scheduling do not.
+
+## A24. A backup file Windows creates and then cannot open; and a rotated key that never took effect
+
+Two operational findings from cleaning up after the key rotation. Neither is about ZCode's protocol;
+both are about this server's own footprint on the machine.
+
+**CONFIRMED** for everything below — each was reproduced and then verified by a read-back.
+
+### A24.1 The trailing-dot filename
+
+`~/.zcode/cli/config.json.bak-20260912151327.` — note the final `.`. It was listed by `glob` and by
+`os.listdir`, was 2112 bytes, and its contents were a valid pre-edit copy of the config. And it was
+unopenable: `existsSync()` returned False, `readFileSync()` threw, and so did every tool that
+resolved the path through Win32.
+
+The cause is not ZCode. **This server created it.** A backup stamp built as
+
+```ts
+new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15)
+```
+
+turns `2026-09-12T15:13:27.123Z` into `20260912151327.123Z` and then cuts at 15 characters, which
+lands on the millisecond dot and makes it the **last** character. NTFS accepts a trailing dot; the
+Win32 path layer strips it. So `copyFileSync` succeeds, the entry appears in a directory listing, and
+nothing that goes through a path API can ever reach it again. The envelope reported `backup: <path>`
+— a safety net that no restore could have used. This is the Article II failure in its purest form:
+the tool reported something that was not true.
+
+It shipped in two places. `readsurface.ts` was fixed first (its comment is what identified the
+mechanism); **`settings.ts:232` still had it**, with a different infix — `.bak-mcp-` — and no
+read-back at all. Left alone it would have produced `config.json.bak-mcp-20260912151327.` on its
+next run. Both now call `src/zcode/backup.ts`.
+
+### A24.2 Deleting such a file
+
+Three forms fail, and the failure is silent in the most dangerous way: the error message shows a path
+with **no trailing dot**, because `ntpath.abspath`/`normpath` strip it. Every attempt therefore aimed
+at a name that does not exist (`WinError 2`), which looks like "already gone".
+
+```python
+PREFIX = "\\" * 2 + "?" + "\\"        # \?\
+def nt_dir():  return PREFIX + os.path.abspath(CLI).replace("/", BACKSLASH)
+def nt_child(n): return nt_dir() + BACKSLASH + n     # n straight from os.listdir
+```
+
+What works:
+
+| step | detail |
+|---|---|
+| enumerate | `os.listdir` on the `\?\` **directory** path — this does show the trailing dot |
+| join | concatenate the raw name; never pass it through `abspath`/`normpath`/`join` |
+| delete | `kernel32.DeleteFileW(nt_child(name))` — succeeded first try, once the dot survived |
+
+`\?\` also requires backslashes only and a fully-qualified path: a single `/` invalidates it, which
+is why the first attempt (built from a mixed-separator path) failed.
+
+And the check that a file is gone must be a **directory listing**, not `exists()`. `exists()` answers
+False for the dot-stripped name whatever happened, so it reports success for a file that is still
+there. The first purge run did exactly that and was caught only by the final verification.
+
+`.re/purge_dotfile.py` keeps the working recipe.
+
+### A24.3 The key rotation that did not reach the process
+
+The superseded OpenRouter key was rotated, and the replacement went into `.env`. The **agent
+environment** was not updated, so two different values are now live on the machine:
+
+| source | fingerprint | status |
+|---|---|---|
+| agent env | `sha256:1723c4f6`, len 73 | **DEAD** — `401 User not found` |
+| `.env` | `sha256:88da80fd`, len 73 | **LIVE** — `200`, `usage: 0` |
+
+This server never reads `.env` itself (by design: `.env` loads only through `npm run start:env`), and
+ZCode's registered entry for it carries no secret. So a tool that resolves OpenRouter **inside ZCode**
+resolves the agent-env value and gets a 401 — while a human reading `.env` sees a working key. The
+rotation looked done and was not.
+
+`DEEPSEEK_API_KEY` (live, `$5.84`) has the mirror-image problem: present in `.env`, absent from the
+agent env.
+
+**The lesson worth keeping:** "the key is rotated" is not a fact until the credential that the
+*process* would resolve has been shown to authenticate. Identify a credential by source, not by name,
+and fingerprint each source separately — a combined `env ?? file` check reports only on the winner.
+`.re/probe_keys.mjs` does this and prints no values.

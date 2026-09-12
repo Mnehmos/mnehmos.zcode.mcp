@@ -86,6 +86,19 @@ specs/001-zcode-control/         spec → plan → research → data-model → c
   stacks and were useful for *finding* code; never depend on them in the MCP.
 - **`~/.zcode/v2/config.json` contains plaintext API keys.** Never print it, never copy it into the
   repo, and always redact. The audit deliberately redacted every observed value.
+- **A backup whose name ends in `.` or a space is created and then unreachable.** NTFS allows it;
+  every Win32 path API strips it, so `existsSync()` returns False and `readFileSync()` throws on a
+  file that a directory listing shows plainly. `iso.replace(/[-:T]/g,'').slice(0,15)` ends in the
+  millisecond dot — that shipped twice and produced `config.json.bak-20260912151327.`, which had to
+  be deleted through a `\\?\` path by hand. **Always take backups through `takeBackup()` in
+  `src/zcode/backup.ts`**, which reads the copy back byte-identical before the caller may write;
+  never hand-roll `copyFileSync`. If such a file ever appears again: `.re/purge_dotfile.py`
+  (addendum A24).
+- **A rotated key is not rotated until the value the *process* resolves authenticates.** `.env` is
+  read only by `npm run start:env`, so the agent environment and `.env` can hold different values
+  under the same name — the previous OpenRouter key was superseded in `.env` and still dead in the
+  agent env, which is the one a tool running inside ZCode resolves. Fingerprint each source
+  separately; `.re/probe_keys.mjs` does and prints no values.
 
 ## Adding a tool action
 

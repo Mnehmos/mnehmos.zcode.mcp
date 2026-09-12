@@ -197,13 +197,10 @@ export function workspaceRequired(tool: string, action: string): Envelope {
   });
 }
 
-export function describe(err: unknown): string {
-  if (err && typeof err === 'object' && 'code' in err && 'message' in err) {
-    const e = err as { code: number; message: string };
-    return `${e.message} (${e.code})`;
-  }
-  return err instanceof Error ? err.message : String(err);
-}
+// Imported (so the local calls below bind) and re-exported (so the many dispatchers that already
+// import it from here keep working). A bare `export ... from` would not create the local binding.
+import { describe } from '../errors.js';
+export { describe };
 
 /** Re-exported for the self-test so it reports the same discovery outcome as the tools. */
 export function discoveryForSelfTest(): Discovery {
