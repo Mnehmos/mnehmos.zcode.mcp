@@ -17,7 +17,7 @@
 | `set_default_thought_level` | protocol | `workspace`, `thought_level` | `workspace/setDefaultThoughtLevel` | `workspace/readState` |
 | `update_interaction_prefs` | protocol | `workspace`, `ask_user_question_auto_resolution` | `workspace/updateInteractionPreferences` | `workspace/readState` |
 | `update_model_io_prefs` | protocol | `workspace`, `full_retention` | `workspace/updateModelIoPreferences` | `workspace/readState` |
-| `upsert_provider` | protocol 🔒 | `workspace`, `provider` | `workspace/upsertModelProvider` | `workspace/readState` |
+| `upsert_provider` | protocol 🔒 | `workspace`, `provider` = `{providerId, kind, models:[{modelId,…}]}` (strict — extra keys are rejected) | `workspace/upsertModelProvider` | `workspace/readState` → `settings.model.available` must contain every requested model |
 | `remove_provider` | protocol 🔒 | `workspace`, `provider_id` | `workspace/removeModelProvider` | `workspace/readState` |
 | `update_provider_registry` | protocol 🔒 | `workspace`, `registry` | `workspace/updateProviderRegistry` | revision echo |
 | `hook_trust_grant` | protocol | `workspace` | `workspace/hooks/trustGrant` | `{accepted}` |
@@ -74,3 +74,12 @@ preferences.
 
 - `read_state` is the cheapest way to answer "what model/mode is this workspace using".
 - Desktop settings keys are enumerated in `ZCODE_STATE_MODEL.md` §2.2 of the RE archive.
+
+
+### Read-back note: `upsert_provider`
+
+A runtime provisioned from the environment knows exactly ONE model, so this action's purpose is
+to widen that list — the observable change is in `settings.model.available`, and the provider
+count does not move at all when the upsert replaces a provider already present. Reading the
+count (as this originally did) cannot detect success, and declaring the result unverifiable was
+wrong: it is verifiable, and verified. Confirmed end to end — see addendum A31.

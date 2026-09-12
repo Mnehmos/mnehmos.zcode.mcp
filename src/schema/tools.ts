@@ -195,15 +195,50 @@ export const CommandArgs = z.discriminatedUnion('action', [
 
 // ── zcode_settings ───────────────────────────────────────────────────────────
 
-export const ProviderBlock = z.object({
-  provider: z.string().min(1),
-  model: z.string().min(1),
-  kind: z.enum(['anthropic', 'openai', 'openai-compatible']).optional(),
-  baseURL: z.string().min(1).optional(),
-  apiKeyRequired: z.boolean().optional(),
-  headers: z.record(z.string(), z.string()).optional(),
-  providerOptions: z.record(z.string(), z.unknown()).optional(),
-}).describe('API keys must be supplied by environment (ZCODE_API_KEY), never here.');
+/**
+ * The provider object `workspace/upsertModelProvider` accepts.
+ *
+ * Taken from the runtime's own schema (`Nje` in `zcode.cjs`), because the previous version was
+ * invented and could never succeed: it required `{provider, model}` — one model, under keys the
+ * runtime does not recognise — while the runtime requires `providerId`, `kind` and a non-empty
+ * `models` array, and is **strict**, so extra keys are a hard rejection:
+ *
+ *   Invalid params — provider.providerId: expected string, received undefined;
+ *                    provider.models: expected array, received undefined;
+ *                    provider: Unrecognized keys: "provider", "model"
+ *
+ * `models` is the point of this action: a runtime spawned from the environment knows exactly ONE
+ * model, so widening this list is what makes other models switchable without respawning.
+ */
+export const ProviderBlock = z
+  .object({
+    providerId: z.string().min(1),
+    kind: z.enum(['anthropic', 'openai', 'openai-compatible']),
+    models: z
+      .array(
+        z.object({
+          modelId: z.string().min(1),
+          label: z.string().min(1).optional(),
+          description: z.string().optional(),
+          contextWindow: z.number().int().positive().optional(),
+          maxOutputTokens: z.number().int().positive().optional(),
+          supportsImages: z.boolean().optional(),
+          supportsPdf: z.boolean().optional(),
+          supportsVideo: z.boolean().optional(),
+          supportsTools: z.boolean().optional(),
+          supportsStructuredOutput: z.boolean().optional(),
+        }),
+      )
+      .min(1)
+      .describe('At least one. A runtime provisioned from the environment knows only one model, so this list is what makes others selectable without a respawn.'),
+    apiFormat: z.enum(['anthropic-messages', 'openai-chat-completions', 'openai-responses']).optional(),
+    label: z.string().min(1).optional(),
+    baseURL: z.string().min(1).optional(),
+    apiKeyRequired: z.boolean().optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    providerOptions: z.record(z.string(), z.unknown()).optional(),
+  })
+  .describe('API keys must be supplied by environment (ZCODE_API_KEY), never here.');
 
 export const SettingsArgs = z.discriminatedUnion('action', [
   z.object({ action: z.literal('read_state'), workspace: Workspace }),

@@ -136,14 +136,30 @@ export async function settingsDispatch(ctx: ServerContext, args: Record<string, 
         if (action === 'upsert_provider') params.provider = provider;
         else params.providerId = String(args.provider_id);
         await write(o, acq.runtime, method, params);
-        const after = await read<{ modelCatalog?: { providers?: unknown[]; revision?: number } }>(
-          o,
-          acq.runtime,
-          'workspace/readState',
-          { workspace: ref },
-        );
-        o.result({ provider_count: after?.modelCatalog?.providers?.length ?? null, revision: after?.modelCatalog?.revision ?? null });
-        o.readBackUnavailable('the provider catalogue is pushed by the host, so it may not change here; a restart may be required');
+        // Read back the MODEL list, not the provider count. A runtime provisioned from the
+        // environment knows exactly one model, and this action's whole purpose is to widen that —
+        // so the observable change is in `settings.model.available`. The provider count does not
+        // move at all when the upsert replaces a provider that is already there.
+        const after = await read<{
+          modelCatalog?: { providers?: unknown[]; revision?: number };
+          settings?: { model?: { available?: Array<{ ref?: { modelId?: string } }> } };
+        }>(o, acq.runtime, 'workspace/readState', { workspace: ref });
+        const available = (after?.settings?.model?.available ?? [])
+          .map((m) => m?.ref?.modelId)
+          .filter((id): id is string => typeof id === 'string');
+        o.result({
+          provider_count: after?.modelCatalog?.providers?.length ?? null,
+          revision: after?.modelCatalog?.revision ?? null,
+          selectable_models: available,
+        });
+        if (action === 'upsert_provider') {
+          const wanted = (args.provider as { models?: Array<{ modelId?: string }> } | undefined)?.models ?? [];
+          const missing = wanted.map((m) => m?.modelId).filter((id): id is string => !!id && !available.includes(id));
+          o.readBack(missing.length === 0, missing.length ? `requested ${JSON.stringify(missing)}, runtime offers ${JSON.stringify(available)}` : undefined);
+        } else {
+          const gone = String(args.provider_id);
+          o.readBack(!available.includes(gone), available.includes(gone) ? `provider ${gone} still offers models` : undefined);
+        }
         break;
       }
 
