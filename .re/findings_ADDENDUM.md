@@ -991,3 +991,499 @@ is worth stating plainly: an owned runtime is a *subset* of what the desktop can
 
 The read surface that matters is unaffected. Sessions, messages, rows, models, usage, plugins, MCP
 inventory and real turns all work; only the diff/rewind-record view and scheduling do not.
+
+## A24. A backup file Windows creates and then cannot open; and a rotated key that never took effect
+
+Two operational findings from cleaning up after the key rotation. Neither is about ZCode's protocol;
+both are about this server's own footprint on the machine.
+
+**CONFIRMED** for everything below — each was reproduced and then verified by a read-back.
+
+### A24.1 The trailing-dot filename
+
+`~/.zcode/cli/config.json.bak-20260912151327.` — note the final `.`. It was listed by `glob` and by
+`os.listdir`, was 2112 bytes, and its contents were a valid pre-edit copy of the config. And it was
+unopenable: `existsSync()` returned False, `readFileSync()` threw, and so did every tool that
+resolved the path through Win32.
+
+The cause is not ZCode. **This server created it.** A backup stamp built as
+
+```ts
+new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15)
+```
+
+turns `2026-09-12T15:13:27.123Z` into `20260912151327.123Z` and then cuts at 15 characters, which
+lands on the millisecond dot and makes it the **last** character. NTFS accepts a trailing dot; the
+Win32 path layer strips it. So `copyFileSync` succeeds, the entry appears in a directory listing, and
+nothing that goes through a path API can ever reach it again. The envelope reported `backup: <path>`
+— a safety net that no restore could have used. This is the Article II failure in its purest form:
+the tool reported something that was not true.
+
+It shipped in two places. `readsurface.ts` was fixed first (its comment is what identified the
+mechanism); **`settings.ts:232` still had it**, with a different infix — `.bak-mcp-` — and no
+read-back at all. Left alone it would have produced `config.json.bak-mcp-20260912151327.` on its
+next run. Both now call `src/zcode/backup.ts`.
+
+### A24.2 Deleting such a file
+
+Three forms fail, and the failure is silent in the most dangerous way: the error message shows a path
+with **no trailing dot**, because `ntpath.abspath`/`normpath` strip it. Every attempt therefore aimed
+at a name that does not exist (`WinError 2`), which looks like "already gone".
+
+```python
+PREFIX = "\\" * 2 + "?" + "\\"        # \?\
+def nt_dir():  return PREFIX + os.path.abspath(CLI).replace("/", BACKSLASH)
+def nt_child(n): return nt_dir() + BACKSLASH + n     # n straight from os.listdir
+```
+
+What works:
+
+| step | detail |
+|---|---|
+| enumerate | `os.listdir` on the `\?\` **directory** path — this does show the trailing dot |
+| join | concatenate the raw name; never pass it through `abspath`/`normpath`/`join` |
+| delete | `kernel32.DeleteFileW(nt_child(name))` — succeeded first try, once the dot survived |
+
+`\?\` also requires backslashes only and a fully-qualified path: a single `/` invalidates it, which
+is why the first attempt (built from a mixed-separator path) failed.
+
+And the check that a file is gone must be a **directory listing**, not `exists()`. `exists()` answers
+False for the dot-stripped name whatever happened, so it reports success for a file that is still
+there. The first purge run did exactly that and was caught only by the final verification.
+
+`.re/purge_dotfile.py` keeps the working recipe.
+
+### A24.3 The key rotation that did not reach the process
+
+The superseded OpenRouter key was rotated, and the replacement went into `.env`. The **agent
+environment** was not updated, so two different values are now live on the machine:
+
+| source | fingerprint | status |
+|---|---|---|
+| agent env | `sha256:1723c4f6`, len 73 | **DEAD** — `401 User not found` |
+| `.env` | `sha256:88da80fd`, len 73 | **LIVE** — `200`, `usage: 0` |
+
+This server never reads `.env` itself (by design: `.env` loads only through `npm run start:env`), and
+ZCode's registered entry for it carries no secret. So a tool that resolves OpenRouter **inside ZCode**
+resolves the agent-env value and gets a 401 — while a human reading `.env` sees a working key. The
+rotation looked done and was not.
+
+`DEEPSEEK_API_KEY` (live, `$5.84`) has the mirror-image problem: present in `.env`, absent from the
+agent env.
+
+**The lesson worth keeping:** "the key is rotated" is not a fact until the credential that the
+*process* would resolve has been shown to authenticate. Identify a credential by source, not by name,
+and fingerprint each source separately — a combined `env ?? file` check reports only on the winner.
+`.re/probe_keys.mjs` does this and prints no values.
+
+## A25. ZCode's model management does NOT provision a runtime this MCP spawns — it is still env-only
+
+**CONFIRMED by measurement on 2026-09-12, with 8 providers configured in ZCode's own config.**
+
+The natural assumption — "ZCode already manages models and providers, so this server does not need
+its own credentials" — is false, and acting on it removes the only working provider bootstrap. Worth
+re-deriving rather than trusting A19, because the condition A19 was measured under (a config with no
+providers in it) is no longer the condition we are in.
+
+### The measurement
+
+`.re/probe_model_env.mjs` spawns the runtime twice, identically except for the environment. The
+runtime keeps `USERPROFILE`/`APPDATA`, so `~/.zcode/v2/config.json` — which at test time held **8
+providers including a live DeepSeek key** — stays fully readable. The question is not whether that
+config is *reachable*, but whether it is *enough*.
+
+```
+A  no provider env
+     settings.model.current   {"modelId":"missing-model","providerId":"zcode-unconfigured"}
+     settings.model.available 0
+     modelCatalog.providers   0
+
+B  + ZCODE_MODEL / ZCODE_BASE_URL / ZCODE_API_KEY
+     settings.model.current   {"modelId":"deepseek-v4.1-flash-expires-on-0910","providerId":"deepseek"}
+     settings.model.available 1
+     modelCatalog.providers   1
+```
+
+A runtime with ZCode's provider config on disk and nothing in its environment reports an **empty
+catalogue**. The config layer that ZCode's own sessions read is not a layer a spawned `app-server`
+consults for credentials.
+
+### ZCode does not export its provider config to MCP children either
+
+The tempting second reading — "then ZCode at least hands its keys to the MCP servers it launches" —
+is also false. Evidence:
+
+| observation | implication |
+|---|---|
+| `HKCU\Environment` holds no provider key at all (only `GEMINI_API_KEY=your_api_key_here`) | nothing is persisted at the OS level for a child to inherit |
+| this server's env DID contain `OPENROUTER_API_KEY`, value `sha256:1723c4f6` | ZCode passes its **own inherited environment** down to children |
+| that value matches **nothing** in ZCode's config, whose OpenRouter key is `sha256:88da80fd` | the app is not exporting what you configured in its UI — it is forwarding a stale variable it was itself launched with |
+| `DEEPSEEK_API_KEY` and `ZAI_API_KEY` are in ZCode's config but **absent** from this server's env | keys you add in model management do not appear in children |
+
+So the direction of flow is: ZCode's environment → child MCP servers. Never: ZCode's provider
+registry → children.
+
+### What IS handled by ZCode / this MCP
+
+Model **selection**, not credential provisioning. `ZCODE_MCP_MODEL` + `ZCODE_MCP_BASE_URL` sit in the
+registration and are read by `parseEnvConfig`; `zcode_models selection:set` pushes a choice to the
+runtime via `workspace/setDefaultModel`. Credentials remain the caller's to supply.
+
+### Credential inventory at the time of writing
+
+Fingerprints only; `.re/where_are_the_keys.mjs` produces this table without printing a value.
+
+| credential | ZCode's provider config | verdict |
+|---|---|---|
+| `OPENROUTER_API_KEY` (`.env`) | **identical** — `sha256:88da80fd` | true duplicate |
+| `DEEPSEEK_API_KEY` (`.env`) | **different** — `.env` `sha256:4fe44415` vs ZCode `sha256:d533861f` | only local copy is `.env` |
+| `ZAI_API_KEY` (`.env`) | absent (ZCode holds two unrelated `builtin:zai-*` keys) | only local copy is `.env` |
+| `ZCODE_MCP_MODEL` / `_BASE_URL` / `_WORKSPACE` | n/a | already duplicated in the registration |
+
+**Consequence:** deleting `.env` today removes the only working bootstrap for a spawned runtime *and*
+the only local copy of two credentials. It is the right end state only once a provider key reaches the
+environment ZCode hands this server — one variable (`DEEPSEEK_API_KEY` or `ZCODE_API_KEY`), which is
+the single channel that works.
+
+### A24.3 and A25 are the same failure wearing different clothes
+
+A24.3 was "the key was rotated in `.env` but the process resolved a different source". This is "the
+key was configured in ZCode but the spawned runtime reads no config at all". Both reduce to: **identify
+a credential by the source a given process actually resolves, and prove it authenticates from there.**
+A credential that is present, correct, and configured somewhere that never reaches the consumer is
+indistinguishable from a missing one — except that it looks done.
+
+## A26. The key in `.env` had been REVOKED — presence is not liveness
+
+**CONFIRMED.** Found while wiring the provider into the registration, and it is the actual reason
+inference was broken.
+
+Addendum A24.3 fingerprinted credentials and compared sources. That is not enough. The same `.env`
+`DEEPSEEK_API_KEY` (`sha256:4fe44415`, ends `b619`), byte-identical, unchanged on disk:
+
+```
+GET /user/balance   ->  200 OK   balance $5.84     (earlier in the same session)
+GET /user/balance   ->  401      "your api key: ****b619 is invalid"   (roughly an hour later)
+```
+
+The key was revoked at the provider between two checks. Nothing local changed; `.env`'s mtime was
+already 15:22Z before the first check.
+
+Of every credential on this machine, exactly one could complete a real inference call against the
+configured model — and it was **not** the one in `.env`, it was ZCode's own:
+
+| candidate | inference call |
+|---|---|
+| `.env` `DEEPSEEK_API_KEY` (`4fe44415`) | 401 — revoked |
+| zcode config `builtin:zai-coding-plan` (`612f4653`) | 401 |
+| zcode config `builtin:zai-start-plan` (`007750b4`) | 401 |
+| zcode config `f0d4fc3e-…` OpenRouter (`88da80fd`) | 401 |
+| **zcode config `f4f09303-…` (`d533861f`)** | **200 — `deepseek-v4.1-flash-expires-on-0910` replied** |
+
+So the "test each source separately" discipline of A24.3 needed one more step: **choose the credential
+by making the call it is supposed to make.** `.re/register_provider_env.py` now tries every candidate
+with a minimal real completion and registers the first that succeeds — first that works, not first
+that exists — and writes nothing if none does. `.re/verify_inference.mjs` then proves the end state
+by running an actual headless turn and checking for the model's reply.
+
+End state, verified: the `zcode` server's env block alone provisions a spawned runtime
+(`model.current = {modelId:"deepseek-v4.1-flash-expires-on-0910",providerId:"deepseek"}`,
+`available=1`) and a real turn returns `INFERENCE_OK`.
+
+### The generalisation of A24.3 → A25 → A26
+
+Each of these was "a credential that looked fine and was not":
+
+1. **A24.3** — present, but a *different* source resolved it than the one that was updated.
+2. **A25** — present and correct in a config that the *consumer never reads*.
+3. **A26** — present, correct, read by the consumer, and **revoked at the issuer**.
+
+The only test none of them passes is liveness. A credential is not "configured" until the call it
+exists for has been made successfully from the place that will make it.
+
+Also note: the live key was sitting in ZCode's provider config the whole time. So the user's instinct
+that "ZCode's model management should be enough" was substantively right about where to find a
+credential — the config just cannot hand it to a spawned runtime (A25), so it has to be read and
+placed in that runtime's environment by us.
+
+## A27. The server now reads ZCode's provider registry — and the false read-back that nearly hid two bugs
+
+**CONFIRMED.** Fixes what A25 diagnosed but left as a user-facing wart.
+
+### What changed
+
+A25 established that a spawned runtime reads no config, so a user who configured their model in
+ZCode — the one place they should have to — had to paste the key a second time where this server
+could see it. `resolveApiKey` now falls back to `~/.zcode/v2/config.json` and copies the matching
+provider's key into the child environment. The environment still wins when set; the fallback only
+fills a gap.
+
+Setup is now: **configure your model in ZCode.** Nothing else.
+
+Guardrails, all tested: read-only; only `options.apiKey` of the matching provider; `credentials.json`
+is never opened (Article IV, and there is a test asserting a key that lives only there is NOT found);
+the value never enters a log, envelope, warning or tool result. A borrowed key is reported as
+`provider_key_from_registry` (advisory) naming the provider, so it is never secret *which* credential
+is being spent.
+
+### The false read-back
+
+The first version looked like it worked. `zcode_models current` answered:
+
+```
+"model": { "modelId": "deepseek-v4.1-flash-expires-on-0910", "providerId": "deepseek" }
+```
+
+with no credential in the environment. The temptation is to call that proof. It is not: that value is
+`ZCODE_MODEL`, which we had just set — the runtime echoes the model it was told to use whether or not
+it has any way to call it. **A read-back that echoes the input is not a read-back.** The real turn
+failed immediately:
+
+```
+provider_not_configured: "Model provider is missing an API key: deepseek"
+```
+
+Only an operation that would fail without the credential can confirm the credential. `.re/mcp_call.mjs`
+drives the real server over stdio for exactly this reason.
+
+### Two matching bugs the turn then exposed
+
+Provider ids are UUIDs or `builtin:*`, so the `deepseek` in `deepseek/…` matches nothing. Matching is
+by endpoint and by model list, and both naive forms silently find nothing:
+
+| signal | naive form | why it fails |
+|---|---|---|
+| endpoint | string equality | registry stores `https://api.deepseek.com`; the runtime is configured with `https://api.deepseek.com/anthropic`. Same provider, one path segment apart |
+| model | the raw ref | registry lists `deepseek-v4.1-flash-expires-on-0910`; the ref is `deepseek/deepseek-v4.1-flash-expires-on-0910` |
+
+Now: URLs are compared for a *boundary* prefix relationship in either direction (exact scores higher
+than prefix), the model is compared **un-split**, and the endpoint dominates the score — a key has to
+belong to the endpoint we are about to call, whereas a provider may serve a model it does not
+advertise. `.../api` deliberately does not match `.../api2`, and there is a test for that.
+
+End state, verified by a real turn with no credential in the environment and none in the
+registration: `outcome: completed`, `text: "MODEL_MENU_ONLY"`.
+
+## A28. 13 of 15 tools were invalid per the MCP spec, so a client could load none of them
+
+**CONFIRMED.** Reported by ZCode's client, reproduced locally, and it was our bug — not a quirk of
+ZCode. Our own MCP SDK rejects the same payload.
+
+### The defect
+
+```
+Invalid result for tools/list:
+  tools[n].inputSchema.type — Invalid input: expected "object"      (13 entries)
+```
+
+MCP requires `inputSchema` to be an object schema with `type: "object"` at the root, and
+`@modelcontextprotocol/sdk`'s `ListToolsResultSchema` enforces it:
+
+```js
+inputSchema: z.object({
+  type: z.literal('object'),
+  properties: z.record(z.string(), AssertObjectSchema).optional(),
+  required: z.array(z.string()).optional(),
+}).catchall(z.unknown())
+```
+
+`zodToJsonSchema` renders a **discriminated union** as a bare `anyOf` with **no root `type`**, and one
+zod union per tool is exactly this codebase's design (Article III: one union per tool). So 13 of 15
+tools published `{anyOf: [...]}` and were refused. The two that passed, `zcode_usage` and
+`zcode_headless`, are plain `z.object` args — they were the only ones that were never a union.
+
+The list handler had hidden it:
+
+```ts
+inputSchema: zodToJsonSchema(t.schema, { $refStrategy: 'none' }) as { type: 'object'; [k: string]: unknown }
+```
+
+That cast *asserts* the shape without producing it. The compiler was satisfied; every client was not.
+
+### The fix
+
+`toolInputSchema()` in `src/schema/tools.ts`: supply a missing root `type`, never overwrite one that
+is present (a mislabelled schema would be worse than a missing type). `anyOf` beside `type: "object"`
+is valid JSON Schema and equivalent here, since every branch is an object, so the union — and the
+per-action validation Article III depends on — is kept rather than flattened.
+
+Verified on the wire, not just in the handler: `.re/verify_tools_list.mjs` drives the real server over
+stdio, takes the actual `tools/list` bytes and validates them with the SDK's own schema.
+
+```
+tools/list returned 15 tool(s)
+root type !== "object": none
+SDK validator: ACCEPTED
+unions preserved: 13 of 15 (the other 2 are plain objects)
+```
+
+### Why nothing caught it, and what closed the gap
+
+There was **no test of the published tool surface at all** — no `test/schema.test.ts`, contrary to
+what AGENTS.md's "adding a tool action" step said, and no assertion anywhere that the tool list was
+acceptable to a client. `test/toolsurface.test.ts` now validates the whole list with the SDK's
+`ListToolsResultSchema` (reporting offending paths, not just a boolean), asserts every tool carries a
+root `type`, checks the unions survive, and requires a real description on each.
+
+### Consequence for the tool-budget work
+
+This changes the arithmetic. Tools that a client refuses are not registered, so **any tool count
+measured while this was broken excluded our 15**. The ceiling question (GLM rejects roughly 89–94
+registered tools, addendum A22) needs re-measuring now that they actually load — the budget may be
+15 tools larger than any previous measurement, which is precisely the direction that hits it.
+
+## A29. `zcode_plugins overview` returned 227 KB, and two warning codes were undeclared
+
+**CONFIRMED on a real call through ZCode**, found by testing the tool surface rather than reading it.
+
+### The payload
+
+`plugins/overview` returns both marketplaces in full — every plugin with English and Chinese
+descriptions, icons and homepages. Measured: **227,208 bytes**, which the caller's transport truncated
+at 50 KB. A result that size does not inform a caller, it evicts their context, and the marketplace
+catalogue is not what they asked about.
+
+`summarisePluginOverview()` now bounds it: marketplaces keep their counts, installed plugins are kept
+in full (that is what a caller is asking about), and the catalogue is replaced by its size. Same call
+after the fix: **2,605 bytes**, an 87× reduction.
+
+Nothing is dropped silently — the caller gets `payload_summarised[degraded]` naming the byte count,
+the plugin count, and the action that returns the workspace's own plugins. A silent truncation would
+be the same class of lie as a success that did not happen.
+
+### Two undeclared warning codes
+
+`provider_key_from_registry` (A27) and `payload_summarised` were both emitted without being added to
+`WARNING_CODES`. `Outcome.warn` takes `code: string`, so nothing rejected them — the vocabulary is
+declarative, not enforced, and two codes had quietly drifted out of the contract that
+`src/warnings.ts` says is stable. Both are now declared. (`payload_too_large` is declared and never
+emitted anywhere; left alone, since removing a declared code is the breaking change.)
+
+### Worth knowing for cost
+
+The conversation read of the test turn showed **79,602 input tokens** for a one-word reply — the ZCode
+agent's own system prompt and tool inventory, not anything this server adds. Each turn costs that.
+
+## A30. Switching models works — and three bugs stood between it and the first attempt
+
+**CONFIRMED by the model naming itself and by the runtime's own catalogue.**
+
+### What a switch actually is
+
+A spawned runtime gets its model from ONE environment variable (`ZCODE_MODEL`), so it offers exactly
+one model in its catalogue. `zcode_models select` therefore has three scopes and only one of them can
+introduce a model the runtime does not already have:
+
+| scope | mechanism | can introduce a NEW model |
+|---|---|---|
+| `server` | sets this process's default for runtimes spawned from then on | ✅ the only one |
+| `workspace` | `workspace/setDefaultModel` | ❌ must already be in the catalogue |
+| `session` | `session/setModel` | ❌ must already be in the catalogue |
+
+Measured with `.re/probe_catalogue.mjs` — same process, before and after a `server` switch:
+
+```
+BEFORE  fresh workspace -> current={deepseek-v4.1-flash-expires-on-0910}  available=1 [that model]
+select scope=server -> deepseek/deepseek-v4-pro
+AFTER   fresh workspace -> current={deepseek-v4-pro}                      available=1 [deepseek-v4-pro]
+```
+
+And independently, spawning the runtime by hand with `ZCODE_MODEL=deepseek/deepseek-v4-pro` and asking
+it to identify itself:
+
+```
+ZCODE_MODEL = deepseek/deepseek-v4-pro                     -> reply "deepseek/deepseek-v4-pro"
+ZCODE_MODEL = deepseek/deepseek-v4.1-flash-expires-on-0910 -> reply "deepseek/deepseek-v4.1-flash-expires-on-0910"
+```
+
+The model really runs. It is not a config value that goes unread.
+
+### The limit that made the first demonstration look broken
+
+A first demonstration switched the target and then ran a turn in a workspace that had **already been
+used**. The turn came back on the OLD model. Nothing was wrong with the plumbing: ZCode's persisted
+**workspace state outranks the environment layer**, so a workspace that already remembers a model
+keeps it, and a fresh runtime only adopts the new default if that workspace has no stronger state.
+
+That is a real constraint on the feature rather than a defect, and `select scope=server` does not warn
+about it. It should: "this changes the default for runtimes spawned from now on" is true but
+incomplete — it also has to be a workspace with no remembered model.
+
+### Three bugs found on the way
+
+1. **`session/setModel` takes a `ModelRef` object, not a string.** Passing `"deepseek/deepseek-v4-pro"`
+   is rejected with `-32602 Invalid params — model: expected object, received string`. Both call sites
+   sent a string: `zcode_models select scope:"session"` and `zcode_session set_model`. `resume` did too.
+   `modelRefObject()` now builds `{modelId, providerId}` and REFUSES a bare model id, because provider
+   ids are UUIDs and there is nothing to guess from.
+2. **`session/resume` reported a false failure.** Its read-back read `after.status`, but the response
+   nests the record under `session` (`after.session.status`), so a successful resume reported
+   `read-back mismatch: status was not observable`. A false negative is the opposite failure from the
+   one read-backs exist to catch — it teaches a caller to ignore the signal. `resolveField()` checks
+   both locations and still fails when a field is genuinely absent.
+3. **`select scope=server` resolved its credential without a hint**, so the registry fallback had
+   nothing to match on and reported `credential_var: null` with a `provider_key_missing` warning for a
+   provider whose key was configured. Now `credential_var: "zcode provider registry:f4f09303-…"`.
+
+## A31. Real-time model switching works — and our tool schema was the only thing stopping it
+
+**CONFIRMED end to end.** A model can be switched live, in a running runtime, with no respawn and no
+rebuild. The rebuild was only ever needed for a code fix.
+
+### The sequence, through the tools
+
+```
+before   available=1  ["deepseek-v4.1-flash-expires-on-0910"]
+zcode_settings upsert_provider   ok=true  selectable_models=["deepseek-v4-flash","deepseek-v4-pro"]
+after    available=2  ["deepseek-v4-flash","deepseek-v4-pro"]
+zcode_models select scope=server -> deepseek/deepseek-v4-pro
+zcode_chat send                  outcome=completed  text="deepseek-v4-pro"
+```
+
+The model answered with the id it had just been switched to. `.re/demo_live_switch.mjs` reproduces it.
+
+### What made this look impossible at first
+
+`workspace/upsertModelProvider` was rejected, and the catalogue did not widen, so the first conclusion
+was "a running runtime's catalogue cannot be changed — the host pushes it". **That was wrong, and the
+error was mine twice over:**
+
+1. `zcode_settings upsert_provider` was **gated off** by default (`ZCODE_MCP_ALLOW_PROVIDER_EDIT=1`),
+   and the refusal was our own guard, not the runtime's. The protocol method was never called.
+2. Once past the gate, the call still failed — because our `ProviderBlock` was **invented**, requiring
+   `{provider, model}` where the runtime requires `{providerId, kind, models: [{modelId}]}` and is
+   **strict**, so the two keys we sent were a hard rejection:
+
+```
+Invalid params — provider.providerId: expected string, received undefined;
+                 provider.models: expected array, received undefined;
+                 provider: Unrecognized keys: "provider", "model"
+```
+
+The action could never have succeeded for any input. Read from the runtime bundle:
+
+```js
+// upsertModelProvider
+provider: f.object({
+  providerId: pe, kind: cEt, models: f.array(mEt).min(1),
+  apiFormat, label, source, baseURL, apiKey, apiKeyRequired,
+  headers, providerOptions, logoUrl, modelsDevProviderId
+}).strict()
+
+// the model entry
+mEt = f.object({ modelId: pe, label?, description?, contextWindow?, maxOutputTokens?,
+                 reasoning?, reasoningProfile?, supportsImages?, supportsPdf?, supportsVideo?,
+                 supportsTools?, supportsStructuredOutput? })
+```
+
+`ProviderBlock` now matches it, and the read-back reads `settings.model.available` — the list this
+action exists to widen — instead of `modelCatalog.providers.length`, which does not move when the
+upsert replaces a provider that is already there. The old code declared the result
+`read_back_unavailable`; it was available all along.
+
+### The lesson, again
+
+Every wrong conclusion in this session came from inferring instead of measuring: that the catalogue
+could not be widened, that the tools were loading, that a model switch had worked. Every correction
+came from an operation that could fail. `probe_*.mjs` scripts exist for this and should be reached for
+before any claim about what the runtime can do.

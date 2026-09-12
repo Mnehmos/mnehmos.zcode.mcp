@@ -59,6 +59,7 @@ specs/001-zcode-control/         spec → plan → research → data-model → c
 | Advertised-but-unparsed flags | `--settings`, `--max-turns`, `--allowed-tools`, `--permission-mode`, `--allow-main-worktree-yolo` |
 | Headless output | `-p "…" --output-format text\|json\|stream-json`; `stream-json` ends with a `{"type":"result",…}` line |
 | Provider config | top-level `model` key; project config beats user config; key via env (`ZCODE_API_KEY`, `ANTHROPIC_API_KEY`, …) |
+| Provider config does NOT reach a spawned runtime | A runtime this server spawns ignores `~/.zcode/v2/config.json` entirely — measured with 8 providers, including a live key, configured there: it still reports `model.current = {modelId:"missing-model",providerId:"zcode-unconfigured"}`. Credential provisioning is the *environment* of the process we spawn. **Since A27 the server reads that registry itself** (`resolveApiKey` → `keyFromProviderRegistry`) and copies the matching key into the child env, so a user only has to configure their model in ZCode. Environment still wins when set. Matching is scored: endpoint prefix relationship first, then the model list — provider ids are UUIDs, and both naive matches (URL equality; the un-split `provider/model` ref) silently find nothing |
 | No local listener on the desktop | The desktop opens **no** HTTP/WS server. Web Remote Control is an outbound `ws` client to `wss://zcode.z.ai/ws`; the desktop↔host channel is tunnelled through that relay in **binary** `rpc-frame` fragments — a different protocol from ZCode Protocol v4. Stdio to an owned runtime is the only local control boundary (addendum §A16) |
 | Remote *server* surface | a real network-reachable ZCode Protocol host RPC exists, but only for remote ZCode servers: `GET /api/server-info` → `POST /api/rpc-host-capability` → `wss://<base>/ws/host?token=…` with `Authorization: Bearer` + `x-zcode-rpc-host-capability`. Out of scope for v1 |
 | Credential cipher is weak | `~/.zcode/v2/credentials.json` is AES-256-GCM, but with `ZCODE_CREDENTIAL_SECRET` unset the key falls back to a value **derived from the machine's own identity** rather than from a user secret — reproducible by anyone holding a copy of the file. **Report it; never use it.** `config.json` provider keys are plaintext |
@@ -86,6 +87,41 @@ specs/001-zcode-control/         spec → plan → research → data-model → c
   stacks and were useful for *finding* code; never depend on them in the MCP.
 - **`~/.zcode/v2/config.json` contains plaintext API keys.** Never print it, never copy it into the
   repo, and always redact. The audit deliberately redacted every observed value.
+- **A backup whose name ends in `.` or a space is created and then unreachable.** NTFS allows it;
+  every Win32 path API strips it, so `existsSync()` returns False and `readFileSync()` throws on a
+  file that a directory listing shows plainly. `iso.replace(/[-:T]/g,'').slice(0,15)` ends in the
+  millisecond dot — that shipped twice and produced `config.json.bak-20260912151327.`, which had to
+  be deleted through a `\\?\` path by hand. **Always take backups through `takeBackup()` in
+  `src/zcode/backup.ts`**, which reads the copy back byte-identical before the caller may write;
+  never hand-roll `copyFileSync`. If such a file ever appears again: `.re/purge_dotfile.py`
+  (addendum A24).
+- **A credential is not configured until the call it exists for succeeds from where it is resolved.**
+  Three variants of this trap have cost real time: the key was updated in `.env` while the process
+  resolved a *different* source; the key was correct in ZCode's model-management config, which a
+  spawned runtime *never reads*; and the key was present, unmodified, and **revoked at the issuer**
+  (200 with a real balance, then 401 an hour later, nothing local changed). Fingerprinting tells you
+  *which* credential you have — only a real call tells you it is alive. `resolveApiKey` now falls back
+  to the registry so the model menu is the only setup step; override it with `DEEPSEEK_API_KEY` /
+  `ANTHROPIC_API_KEY` / `ZCODE_API_KEY`, which win. `.re/probe_keys.mjs`,
+  `.re/register_provider_env.py` and `.re/mcp_call.mjs` exist for this and print no values.
+- **A state read that echoes your input is not a read-back.** `zcode_models current` reported
+  `providerId: "deepseek"` while the provider had **no key** — it was returning `ZCODE_MODEL`, which
+  we had just set. Only the real turn failed. When a value can come from the thing you just
+  configured, the only honest check is the operation that would fail without it.
+- **A tool shape you invented is not the protocol's shape.** Four actions were broken this way and each
+  could never have succeeded for *any* input: `session/setModel` sent a string where the runtime wants
+  a `ModelRef` object; `upsert_provider` sent `{provider, model}` where the runtime requires
+  `{providerId, kind, models:[{modelId}]}` and is strict; and two read-backs watched fields that do not
+  move (`after.status` on a response that nests the record under `session`; the provider count for an
+  action whose effect is the model list). Read the shape from the runtime before writing the zod:
+  grep `E:\zcode\resources\glm\zcode.cjs` for the method name to get its handler, then read the
+  `f.object({...})` nearby. Minified names are fine for *finding* code — never depend on them in the
+  server. The audit's `ZCODE_API_CATALOG.md` maps method → handler name.
+- **Measure with an operation that can fail, not by inspecting.** Every wrong conclusion in this
+  project's history came from inferring: that the tool list was loading, that a model switch had
+  worked, that the catalogue could not be widened. Every correction came from a probe whose failure
+  was visible. `.re/verify_tools_list.mjs`, `.re/probe_model_env.mjs`, `.re/demo_live_switch.mjs` and
+  `.re/mcp_call.mjs` exist for this; reach for them before making a claim.
 
 ## Adding a tool action
 
@@ -96,7 +132,8 @@ specs/001-zcode-control/         spec → plan → research → data-model → c
    If you cannot write a read-back for a mutating action, do not ship it as a typed action — put it
    behind `zcode_protocol` where it is explicitly marked `unreliable`.
 3. Implement the dispatcher in `src/zcode/actions/<tool>.ts`.
-4. Add a schema case to `test/schema.test.ts` and a unit test for any pure logic.
+4. Add a case to `test/toolsurface.test.ts` (it validates the whole published list against the MCP
+   SDK's own schema — a tool the client refuses is worth nothing) and a unit test for any pure logic.
 5. If the action mutates, extend the opt-in integration suite and prove the read-back.
 6. Update the tool table in `README.md`.
 

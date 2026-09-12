@@ -13,6 +13,7 @@
  * hazard the model calling us will not see (FR-045).
  */
 import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 
 // ── shared vocabulary ────────────────────────────────────────────────────────
 
@@ -194,15 +195,50 @@ export const CommandArgs = z.discriminatedUnion('action', [
 
 // ── zcode_settings ───────────────────────────────────────────────────────────
 
-export const ProviderBlock = z.object({
-  provider: z.string().min(1),
-  model: z.string().min(1),
-  kind: z.enum(['anthropic', 'openai', 'openai-compatible']).optional(),
-  baseURL: z.string().min(1).optional(),
-  apiKeyRequired: z.boolean().optional(),
-  headers: z.record(z.string(), z.string()).optional(),
-  providerOptions: z.record(z.string(), z.unknown()).optional(),
-}).describe('API keys must be supplied by environment (ZCODE_API_KEY), never here.');
+/**
+ * The provider object `workspace/upsertModelProvider` accepts.
+ *
+ * Taken from the runtime's own schema (`Nje` in `zcode.cjs`), because the previous version was
+ * invented and could never succeed: it required `{provider, model}` — one model, under keys the
+ * runtime does not recognise — while the runtime requires `providerId`, `kind` and a non-empty
+ * `models` array, and is **strict**, so extra keys are a hard rejection:
+ *
+ *   Invalid params — provider.providerId: expected string, received undefined;
+ *                    provider.models: expected array, received undefined;
+ *                    provider: Unrecognized keys: "provider", "model"
+ *
+ * `models` is the point of this action: a runtime spawned from the environment knows exactly ONE
+ * model, so widening this list is what makes other models switchable without respawning.
+ */
+export const ProviderBlock = z
+  .object({
+    providerId: z.string().min(1),
+    kind: z.enum(['anthropic', 'openai', 'openai-compatible']),
+    models: z
+      .array(
+        z.object({
+          modelId: z.string().min(1),
+          label: z.string().min(1).optional(),
+          description: z.string().optional(),
+          contextWindow: z.number().int().positive().optional(),
+          maxOutputTokens: z.number().int().positive().optional(),
+          supportsImages: z.boolean().optional(),
+          supportsPdf: z.boolean().optional(),
+          supportsVideo: z.boolean().optional(),
+          supportsTools: z.boolean().optional(),
+          supportsStructuredOutput: z.boolean().optional(),
+        }),
+      )
+      .min(1)
+      .describe('At least one. A runtime provisioned from the environment knows only one model, so this list is what makes others selectable without a respawn.'),
+    apiFormat: z.enum(['anthropic-messages', 'openai-chat-completions', 'openai-responses']).optional(),
+    label: z.string().min(1).optional(),
+    baseURL: z.string().min(1).optional(),
+    apiKeyRequired: z.boolean().optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    providerOptions: z.record(z.string(), z.unknown()).optional(),
+  })
+  .describe('API keys must be supplied by environment (ZCODE_API_KEY), never here.');
 
 export const SettingsArgs = z.discriminatedUnion('action', [
   z.object({ action: z.literal('read_state'), workspace: Workspace }),
@@ -409,13 +445,12 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
       'rewind_apply is destructive and requires confirm:true.',
     schema: FilesArgs,
   },
-  {
-    name: 'zcode_command',
-    description:
-      'Resolve and execute ZCode\'s own command surface. NOTE: v4/command returns ADMISSION, not completion — ' +
-      'use zcode_chat when you need the outcome.',
-    schema: CommandArgs,
-  },
+  // `zcode_command` is deliberately NOT published in this release. Its schema below is the designed
+  // contract, but no dispatcher was ever written, so a client that called it got
+  // `unknown tool: zcode_command` — advertised and unusable, which is the exact failure this project
+  // exists to prevent. (`query` maps to `v4/commands/query` and `execute` to `v4/command`, both
+  // already used elsewhere; `catalog` needs a data source that does not exist yet.) Publishing it
+  // again needs a dispatcher, a contract and tests, not just the entry.
   {
     name: 'zcode_settings',
     description:
@@ -491,3 +526,22 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
 
 /** Tool names only, for the budget assertion in tests. */
 export const TOOL_NAMES = TOOL_REGISTRY.map((t) => t.name);
+
+/**
+ * The JSON Schema published for a tool's arguments, as MCP requires it.
+ *
+ * MCP mandates `type: "object"` at the root, and both the SDK's `ListToolsResultSchema` and ZCode's
+ * client enforce it — the error is `Invalid input: expected "object"` at `tools[n].inputSchema.type`.
+ * `zodToJsonSchema` on a discriminated union emits a bare `anyOf` with NO root `type`, so 13 of these
+ * 15 tools were being rejected; the list handler previously cast the result to `{type:'object'}`, a
+ * type assertion that describes the shape without producing it. Two tools happened to pass only
+ * because their args are a plain `z.object`.
+ *
+ * `anyOf` beside `type: "object"` is valid JSON Schema and equivalent here, since every branch is an
+ * object — so the union is kept rather than flattened.
+ */
+export function toolInputSchema(schema: z.ZodTypeAny): { type: 'object'; [k: string]: unknown } {
+  const json = zodToJsonSchema(schema, { $refStrategy: 'none' }) as Record<string, unknown>;
+  // Supply a missing root type; never overwrite one that is present, which would misdescribe it.
+  return (json.type === undefined ? { ...json, type: 'object' } : json) as { type: 'object'; [k: string]: unknown };
+}

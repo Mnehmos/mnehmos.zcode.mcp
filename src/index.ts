@@ -17,7 +17,6 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import { fileURLToPath } from 'node:url';
 
 import { discoverRuntime, discoveryFailure, ensureDirs, loadEnv, resolveNode } from './schema/env.js';
@@ -40,7 +39,7 @@ import { filesDispatch } from './zcode/actions/files.js';
 import { settingsDispatch } from './zcode/actions/settings.js';
 import { headlessDispatch, protocolDispatch } from './zcode/actions/protocol.js';
 import { createTransport } from './zcode/transport.js';
-import { TOOL_REGISTRY } from './schema/tools.js';
+import { TOOL_REGISTRY, toolInputSchema } from './schema/tools.js';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
@@ -160,10 +159,7 @@ async function serve(): Promise<void> {
     tools: TOOL_REGISTRY.map((t) => ({
       name: t.name,
       description: t.description,
-      inputSchema: zodToJsonSchema(t.schema, { $refStrategy: 'none' }) as {
-        type: 'object';
-        [k: string]: unknown;
-      },
+      inputSchema: toolInputSchema(t.schema),
     })),
   }));
 

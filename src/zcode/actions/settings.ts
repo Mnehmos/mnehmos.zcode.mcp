@@ -12,12 +12,13 @@
  * model's context. That is not something a caller can opt out of; `ZCODE_MCP_REDACT` relaxes wire
  * logging, never this.
  */
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import type { ServerContext } from '../../context.js';
 import type { Envelope } from '../../envelope.js';
+import { takeBackup } from '../backup.js';
 import { isSensitiveKey, REDACTED } from '../redact.js';
 import { acquireOrFail, describe, finish, newRunId, outcome, read, refOf, resolveWorkspace, workspaceRequired, write } from './_shared.js';
 
@@ -135,14 +136,30 @@ export async function settingsDispatch(ctx: ServerContext, args: Record<string, 
         if (action === 'upsert_provider') params.provider = provider;
         else params.providerId = String(args.provider_id);
         await write(o, acq.runtime, method, params);
-        const after = await read<{ modelCatalog?: { providers?: unknown[]; revision?: number } }>(
-          o,
-          acq.runtime,
-          'workspace/readState',
-          { workspace: ref },
-        );
-        o.result({ provider_count: after?.modelCatalog?.providers?.length ?? null, revision: after?.modelCatalog?.revision ?? null });
-        o.readBackUnavailable('the provider catalogue is pushed by the host, so it may not change here; a restart may be required');
+        // Read back the MODEL list, not the provider count. A runtime provisioned from the
+        // environment knows exactly one model, and this action's whole purpose is to widen that —
+        // so the observable change is in `settings.model.available`. The provider count does not
+        // move at all when the upsert replaces a provider that is already there.
+        const after = await read<{
+          modelCatalog?: { providers?: unknown[]; revision?: number };
+          settings?: { model?: { available?: Array<{ ref?: { modelId?: string } }> } };
+        }>(o, acq.runtime, 'workspace/readState', { workspace: ref });
+        const available = (after?.settings?.model?.available ?? [])
+          .map((m) => m?.ref?.modelId)
+          .filter((id): id is string => typeof id === 'string');
+        o.result({
+          provider_count: after?.modelCatalog?.providers?.length ?? null,
+          revision: after?.modelCatalog?.revision ?? null,
+          selectable_models: available,
+        });
+        if (action === 'upsert_provider') {
+          const wanted = (args.provider as { models?: Array<{ modelId?: string }> } | undefined)?.models ?? [];
+          const missing = wanted.map((m) => m?.modelId).filter((id): id is string => !!id && !available.includes(id));
+          o.readBack(missing.length === 0, missing.length ? `requested ${JSON.stringify(missing)}, runtime offers ${JSON.stringify(available)}` : undefined);
+        } else {
+          const gone = String(args.provider_id);
+          o.readBack(!available.includes(gone), available.includes(gone) ? `provider ${gone} still offers models` : undefined);
+        }
         break;
       }
 
@@ -229,8 +246,15 @@ function settingsSetDesktop(
     // forward-migrates this file, so dropping keys we do not recognise would corrupt its state.
     const current = existsSync(p) ? (JSON.parse(readFileSync(p, 'utf8')) as Record<string, unknown>) : {};
     const merged = { ...current, ...patch };
-    const backup = `${p}.bak-mcp-${new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15)}`;
-    if (existsSync(p)) copyFileSync(p, backup);
+    // A backup proven restorable, or no write at all. The stamp here used to be
+    // `iso.replace(/[-:T]/g,'').slice(0,15)`, which ends in the millisecond dot — a name Windows
+    // creates but cannot open. See src/zcode/backup.ts.
+    const taken = takeBackup(p, 'mcp');
+    if (!taken.ok) {
+      o.fail(`${taken.reason}; refusing to modify ${p}`);
+      return finish(ctx, o, runId);
+    }
+    const backup = taken.path;
     writeFileSync(p, `${JSON.stringify(merged, null, 2)}\n`, 'utf8');
 
     const verify = JSON.parse(readFileSync(p, 'utf8')) as Record<string, unknown>;

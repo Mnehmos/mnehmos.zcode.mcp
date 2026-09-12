@@ -8,12 +8,13 @@
  * envelope says `method_not_supported` with `impact: unreliable` rather than reporting an empty
  * result, because "nothing there" and "we could not ask" mean different things to a caller.
  */
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import type { ServerContext } from '../../context.js';
 import type { Envelope } from '../../envelope.js';
+import { takeBackup } from '../backup.js';
 import { isMethodNotFound } from '../protocol.js';
 import { redact, isSensitiveKey, REDACTED } from '../redact.js';
 import { acquireOrFail, describe, finish, newRunId, outcome, read, refOf, resolveWorkspace, workspaceRequired, write } from './_shared.js';
@@ -171,7 +172,18 @@ export async function pluginsDispatch(ctx: ServerContext, args: Record<string, u
         break;
       }
       case 'overview': {
-        o.result(await read(o, acq.runtime, 'plugins/overview', { workspace: ref }));
+        const raw = await read<Record<string, unknown>>(o, acq.runtime, 'plugins/overview', { workspace: ref });
+        const { value, omitted } = summarisePluginOverview(raw);
+        o.result(value);
+        if (omitted) {
+          o.warn(
+            'payload_summarised',
+            `the runtime returned ${omitted.bytes} bytes of marketplace catalogue (${omitted.plugins} ` +
+              'plugins, each with i18n descriptions and icons); only installed plugins are listed. ' +
+              'Use action "list" for this workspace\'s plugins and their components.',
+            'degraded',
+          );
+        }
         o.readOnly();
         break;
       }
@@ -272,6 +284,61 @@ function requireGuard(o: ReturnType<typeof outcome>, action: string): boolean {
  * 89-94 registered tools with `[1210] Invalid API parameter`. Worth saying before a caller
  * discovers it as an opaque model failure.
  */
+/**
+ * Above this, a read is summarised rather than passed through.
+ *
+ * `plugins/overview` returns BOTH marketplaces in full — every plugin with i18n descriptions, icons
+ * and homepages — which measured **227 KB** on a real call. A tool result that size does not inform
+ * the caller, it evicts their context, and the marketplace catalogue is not what they asked about.
+ * The workspace's own plugins are what matters, and `plugins/list` gives those.
+ */
+const MAX_OVERVIEW_BYTES = 60_000;
+
+/**
+ * Bound the plugin overview to what a caller can use, and report exactly what was withheld.
+ *
+ * Summarising silently would be its own kind of lie, so the caller gets a `payload_summarised`
+ * warning naming the byte count and the plugin count, plus where the full data lives.
+ */
+export function summarisePluginOverview(
+  raw: Record<string, unknown>,
+  maxBytes = MAX_OVERVIEW_BYTES,
+): { value: Record<string, unknown>; omitted: { bytes: number; plugins: number } | null } {
+  const encoded = JSON.stringify(raw ?? {});
+  if (encoded.length <= maxBytes) return { value: raw, omitted: null };
+
+  const rows = (v: unknown): Array<Record<string, unknown>> => (Array.isArray(v) ? (v as Array<Record<string, unknown>>) : []);
+  const marketplaces = rows(raw.marketplaces).map((m) => ({
+    id: m.id,
+    name: m.name,
+    pluginCount: m.pluginCount,
+    lastUpdated: m.lastUpdated,
+    isOfficial: m.isOfficial,
+  }));
+  const available = rows(raw.availablePlugins);
+  const installed = available
+    .filter((p) => p.installed === true)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      marketplace: p.marketplace,
+      installed: true,
+      componentTypes: p.componentTypes ?? [],
+      ...(typeof p.description === 'string' ? { description: p.description.slice(0, 160) } : {}),
+    }));
+
+  return {
+    value: {
+      marketplaces,
+      installed_plugins: installed,
+      installed_count: installed.length,
+      catalogue_plugins: available.length,
+      catalogue_omitted: true,
+    },
+    omitted: { bytes: encoded.length, plugins: available.length },
+  };
+}
+
 function budgetWarning(o: ReturnType<typeof outcome>, plugins: Array<Record<string, unknown>>): void {
   const budget = Number(process.env.ZCODE_MCP_TOOL_BUDGET ?? 88);
   const enabled = plugins.filter((p) => p.enabled === true);
@@ -476,13 +543,15 @@ function editAgentConfig(
   raw.mcp = mcp;
 
   try {
-    const backup = `${p}.bak-${new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15)}`;
-    if (existsSync(p)) {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      require('node:fs').copyFileSync(p, backup);
+    // A backup proven restorable, or no write at all. See src/zcode/backup.ts for the trailing-dot
+    // and same-second hazards this closes.
+    const taken = takeBackup(p);
+    if (!taken.ok) {
+      o.fail(`${taken.reason}; refusing to modify ${p}`);
+      return null;
     }
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    require('node:fs').writeFileSync(p, `${JSON.stringify(raw, null, 2)}\n`, 'utf8');
+    const backup = taken.path;
+    writeFileSync(p, `${JSON.stringify(raw, null, 2)}\n`, 'utf8');
     const verify = JSON.parse(readFileSync(p, 'utf8')) as Record<string, unknown>;
     const nowServers = ((verify.mcp as { servers?: Record<string, unknown> })?.servers ?? {}) as Record<string, unknown>;
     const present = name in nowServers;

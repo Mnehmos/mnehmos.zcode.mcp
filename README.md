@@ -37,7 +37,7 @@ own protocol — never by simulating a user.
 | # | Finding | Consequence |
 |---|---|---|
 | 1 | The agent runtime is spawnable and scriptable by an unrelated process, over stdio | Rating **A** control surface; no UI automation anywhere |
-| 2 | The runtime needs **its own** model-provider config and does not inherit the desktop's | The MCP must provision a provider — and can pass the API key by **environment**, so no secret touches disk |
+| 2 | The runtime needs **its own** model-provider config and does not inherit the desktop's — not even the providers configured in ZCode's own model management | The MCP must provision a provider, and the key reaches it by **environment**. The key itself has to be placed in the environment of whatever launches this server; this server never generates a file containing one, and never reads ZCode's credential store |
 | 3 | Owning the runtime makes us its **only client**, so it sends *us* the approval requests | A default-**deny** policy module is mandatory, not a nicety, or turns deadlock |
 | 4 | `v4/command` returns **admission**, not completion | The chat tool must observe a terminal turn event before claiming success |
 | 5 | **ZCode has no editor document service** | "get active editor" / "replace selection" are not buildable; file mutation goes through the agent's own tools, which is the only path that produces checkpoints and participates in rewind |
@@ -98,7 +98,7 @@ provider rejects requests above roughly 89–94 registered tools.
 | `zcode_conversation` | `rows`, `messages`, `events`, `plans`, `usage` | ✅ | works |
 | `zcode_plugins` | `list`, `overview`, `describe`, `validate`, `set_enabled`, `configure`, `reset_config`, `install`, `update`, `uninstall`, `marketplace`, `cancel_operation` | mixed | works |
 | `zcode_mcp` | `list`, `status`, `servers`, `add_server`, `remove_server` | mixed | works |
-| `zcode_settings` | `read_state`, `get`, `set_desktop`, `set_default_*`, `update_*_prefs`, provider actions, `hook_trust_grant` | mixed | works |
+| `zcode_settings` | `read_state`, `get`, `set_desktop`, `set_default_*`, `update_*_prefs`, `upsert_provider`/`remove_provider`/`update_provider_registry`, `hook_trust_grant` | mixed | works; `upsert_provider` is what widens a runtime's model list |
 | `zcode_protocol` | `methods`, `call` | mixed | works, gated |
 | `zcode_headless` | `prompt` | ❌ | works |
 | `zcode_automation` | `list`, `create`, `update`, `delete`, `check_binding` | mixed | **declared limitation** |
@@ -147,8 +147,11 @@ From `.specify/memory/constitution.md`:
 2. **No success without read-back.** Every mutating action re-reads and fails on contradiction.
    Admission is not completion. `noop` is not success.
 3. **Schemas are contracts.** zod before spawn; protocol version asserted at first contact; loud on drift.
-4. **Secret handling.** API keys travel by environment, never a generated file; redaction is on by
-   default; ZCode's credential store is never read or written.
+4. **Secret handling.** API keys travel by environment, never a file this server generates; redaction
+   is on by default; ZCode's credential store is never read or written. Where the key physically
+   lives is the launcher's business — a `.env` for `npm run start:env`, or the `env` block of the MCP
+   client's registration for a client that starts the server itself. The one place that does **not**
+   work is ZCode's model-management config, which a spawned runtime does not read.
 5. **Deny by default.** The approval policy defaults to deny; blanket auto-approval is prohibited.
 6. **Bounded resources.** Timeouts, owned process groups, hard kill on every path, no orphans.
 7. **The repo is the memory.** Audit row per call, hashed artifacts, evidence labels on every claim.
@@ -187,6 +190,56 @@ un-analysed `hooks trust` family). The two that mattered most resolved decisivel
 - **U-4** — credential protection. Provider keys in `config.json` are **plaintext**;
   `credentials.json` is AES-256-GCM but with a key **derived from the machine's own identity** when
   `ZCODE_CREDENTIAL_SECRET` is unset, so it is obfuscated rather than truly encrypted.
+
+### Open in this server
+
+- **`zcode_models select scope=server` does not warn** that a workspace which already remembers a
+  model keeps it. A switch can therefore look applied and have no effect on the next turn.
+- **`zcode_command` is withheld.** Its schema is designed and its protocol methods exist, but no
+  dispatcher was written, so calling it returned `unknown tool` while it was still advertised. An
+  advertised tool that cannot work is worse than an absent one, so it is not published until it has a
+  dispatcher, a contract and tests.
+- **The tool budget needs re-measuring.** The recorded 87 was taken while these 15 tools were being
+  rejected by the client, so it is roughly 15 too low (14 published tools plus one withheld). The 89-94 ceiling is a GLM limitation and does
+  not apply to other providers.
+
+## Giving it a model
+
+**Configure your provider in ZCode — that is the whole setup.** The model menu writes
+`~/.zcode/v2/config.json`, and this server reads the credential for the provider it is about to call
+from there. Nothing needs to be duplicated anywhere, and no key has to be pasted a second time.
+
+Resolution order, and the environment always wins:
+
+| source | when |
+|---|---|
+| `DEEPSEEK_API_KEY` / `ANTHROPIC_API_KEY` / `ZCODE_API_KEY` in this server's environment | you set one deliberately — it wins |
+| the matching provider in `~/.zcode/v2/config.json` | the fallback, so the model menu alone is enough |
+
+A key that came from the registry is reported as `provider_key_from_registry` (advisory) naming the
+provider, so which credential is being spent is never a mystery. Point the server at a model and
+endpoint with `ZCODE_MCP_MODEL` and `ZCODE_MCP_BASE_URL`.
+
+### Switching models
+
+A runtime spawned from the environment knows exactly **one** model, so its catalogue has one entry and
+there is nothing to switch to. `zcode_settings upsert_provider` widens that catalogue on a **running**
+runtime, gated behind `ZCODE_MCP_ALLOW_PROVIDER_EDIT=1`; `zcode_models select` then switches:
+
+| scope | mechanism | can introduce a *new* model |
+|---|---|---|
+| `server` | this process's default, for runtimes spawned afterwards | yes |
+| `workspace` | `workspace/setDefaultModel` | only from the runtime's catalogue |
+| `session` | `session/setModel` | only from the runtime's catalogue |
+
+Measured end to end: the catalogue goes 1 → 2 models, a switch selects the added one, and the turn
+that follows runs on it. One limit worth knowing: **a workspace that already remembers a model keeps
+it** — `select scope=server` applies to runtimes spawned afterwards in a workspace with no stronger
+persisted state.
+
+Two things this deliberately does **not** do: it never opens `~/.zcode/v2/credentials.json` (that
+file has a machine-derivable cipher and is off-limits by policy, not by difficulty), and it never puts
+a key in a tool result, a log line, or a warning — only the provider's id.
 
 ## Two things worth doing on your machine
 
