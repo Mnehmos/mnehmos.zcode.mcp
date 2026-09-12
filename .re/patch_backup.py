@@ -19,6 +19,12 @@ TWO FIXES
   2. READ THE BACKUP BACK before reporting it, and refuse to modify the file if it is unreadable
 
 Run: python .re/patch_backup.py
+
+SUPERSEDED IN PART: the deletion step below does NOT work — every path form it tries fails, because
+`ntpath.abspath` strips the trailing dot before the call reaches the filesystem. Use
+`.re/purge_dotfile.py` instead: it enumerates the raw name and reaches it through a `\\?\` path.
+See addendum A24.2. (The patch half of this script did apply, but the code now lives in
+`src/zcode/backup.ts`.)
 """
 import glob
 import io

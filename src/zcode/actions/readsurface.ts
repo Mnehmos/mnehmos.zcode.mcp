@@ -8,12 +8,13 @@
  * envelope says `method_not_supported` with `impact: unreliable` rather than reporting an empty
  * result, because "nothing there" and "we could not ask" mean different things to a caller.
  */
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import type { ServerContext } from '../../context.js';
 import type { Envelope } from '../../envelope.js';
+import { takeBackup } from '../backup.js';
 import { isMethodNotFound } from '../protocol.js';
 import { redact, isSensitiveKey, REDACTED } from '../redact.js';
 import { acquireOrFail, describe, finish, newRunId, outcome, read, refOf, resolveWorkspace, workspaceRequired, write } from './_shared.js';
@@ -476,31 +477,14 @@ function editAgentConfig(
   raw.mcp = mcp;
 
   try {
-    // A timestamp that cannot end in punctuation. Stripping [-:T] from an ISO string and
-    // slicing leaves the millisecond dot as the FINAL character, and on Windows a name ending
-    // in '.' is legal at the NTFS level but stripped by every Win32 API: the backup is created
-    // and can never be opened. That is a backup reported as safety that cannot be restored
-    // from. Matches ZCode's own convention: `config.json.bak-20260910-210504`.
-    const stamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-');
-    // Second resolution, so two edits in the same second would collide and the second would
-    // silently overwrite the first — losing a backup generation without saying so.
-    let backup = `${p}.bak-${stamp}`;
-    for (let n = 2; existsSync(backup); n++) backup = `${p}.bak-${stamp}-${n}`;
-    if (existsSync(p)) {
-      copyFileSync(p, backup);
-      // Verify the backup is READABLE, not merely created.
-      try {
-        const restored = readFileSync(backup, 'utf8');
-        if (restored.length === 0 && readFileSync(p, 'utf8').length > 0) {
-          o.fail(`backup at ${backup} is empty; refusing to modify ${p}`);
-          return null;
-        }
-      } catch (err) {
-        o.fail(`backup at ${backup} cannot be read back (${describe(err)}); refusing to modify ${p}`);
-        return null;
-      }
+    // A backup proven restorable, or no write at all. See src/zcode/backup.ts for the trailing-dot
+    // and same-second hazards this closes.
+    const taken = takeBackup(p);
+    if (!taken.ok) {
+      o.fail(`${taken.reason}; refusing to modify ${p}`);
+      return null;
     }
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const backup = taken.path;
     writeFileSync(p, `${JSON.stringify(raw, null, 2)}\n`, 'utf8');
     const verify = JSON.parse(readFileSync(p, 'utf8')) as Record<string, unknown>;
     const nowServers = ((verify.mcp as { servers?: Record<string, unknown> })?.servers ?? {}) as Record<string, unknown>;
