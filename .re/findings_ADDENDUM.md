@@ -1152,3 +1152,56 @@ key was configured in ZCode but the spawned runtime reads no config at all". Bot
 a credential by the source a given process actually resolves, and prove it authenticates from there.**
 A credential that is present, correct, and configured somewhere that never reaches the consumer is
 indistinguishable from a missing one — except that it looks done.
+
+## A26. The key in `.env` had been REVOKED — presence is not liveness
+
+**CONFIRMED.** Found while wiring the provider into the registration, and it is the actual reason
+inference was broken.
+
+Addendum A24.3 fingerprinted credentials and compared sources. That is not enough. The same `.env`
+`DEEPSEEK_API_KEY` (`sha256:4fe44415`, ends `b619`), byte-identical, unchanged on disk:
+
+```
+GET /user/balance   ->  200 OK   balance $5.84     (earlier in the same session)
+GET /user/balance   ->  401      "your api key: ****b619 is invalid"   (roughly an hour later)
+```
+
+The key was revoked at the provider between two checks. Nothing local changed; `.env`'s mtime was
+already 15:22Z before the first check.
+
+Of every credential on this machine, exactly one could complete a real inference call against the
+configured model — and it was **not** the one in `.env`, it was ZCode's own:
+
+| candidate | inference call |
+|---|---|
+| `.env` `DEEPSEEK_API_KEY` (`4fe44415`) | 401 — revoked |
+| zcode config `builtin:zai-coding-plan` (`612f4653`) | 401 |
+| zcode config `builtin:zai-start-plan` (`007750b4`) | 401 |
+| zcode config `f0d4fc3e-…` OpenRouter (`88da80fd`) | 401 |
+| **zcode config `f4f09303-…` (`d533861f`)** | **200 — `deepseek-v4.1-flash-expires-on-0910` replied** |
+
+So the "test each source separately" discipline of A24.3 needed one more step: **choose the credential
+by making the call it is supposed to make.** `.re/register_provider_env.py` now tries every candidate
+with a minimal real completion and registers the first that succeeds — first that works, not first
+that exists — and writes nothing if none does. `.re/verify_inference.mjs` then proves the end state
+by running an actual headless turn and checking for the model's reply.
+
+End state, verified: the `zcode` server's env block alone provisions a spawned runtime
+(`model.current = {modelId:"deepseek-v4.1-flash-expires-on-0910",providerId:"deepseek"}`,
+`available=1`) and a real turn returns `INFERENCE_OK`.
+
+### The generalisation of A24.3 → A25 → A26
+
+Each of these was "a credential that looked fine and was not":
+
+1. **A24.3** — present, but a *different* source resolved it than the one that was updated.
+2. **A25** — present and correct in a config that the *consumer never reads*.
+3. **A26** — present, correct, read by the consumer, and **revoked at the issuer**.
+
+The only test none of them passes is liveness. A credential is not "configured" until the call it
+exists for has been made successfully from the place that will make it.
+
+Also note: the live key was sitting in ZCode's provider config the whole time. So the user's instinct
+that "ZCode's model management should be enough" was substantively right about where to find a
+credential — the config just cannot hand it to a spawned runtime (A25), so it has to be read and
+placed in that runtime's environment by us.

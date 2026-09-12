@@ -131,6 +131,23 @@ const scenarios = [
   ],
 ];
 
+// C is the one that matters: the env block ZCode will actually hand this server, read from the
+// registration. No .env, no inherited credential — just what the config declares.
+const regPath = join(homedir(), '.zcode', 'cli', 'config.json');
+if (existsSync(regPath)) {
+  const block = JSON.parse(readFileSync(regPath, 'utf8'))?.mcp?.servers?.zcode?.env ?? {};
+  const env = { ...baseEnv() };
+  for (const [k, v] of Object.entries(block)) env[k] = v;
+  // The server maps its own ZCODE_MCP_* names onto what the runtime reads, so mirror that here.
+  env.ZCODE_MODEL = block.ZCODE_MCP_MODEL ?? '';
+  env.ZCODE_BASE_URL = block.ZCODE_MCP_BASE_URL ?? '';
+  for (const [k, v] of Object.entries(block)) {
+    if (k.endsWith('_API_KEY')) env.ZCODE_API_KEY = v;
+  }
+  scenarios.push([`C  registration env block (${Object.keys(block).length} vars)`, env]);
+}
+
+import { readFileSync as _rf } from 'node:fs';
 console.log(`runtime: ${RUNTIME}`);
 console.log(`workspace: ${WS}`);
 console.log(`zcode config on disk: ${existsSync(join(homedir(), '.zcode', 'v2', 'config.json')) ? 'present' : 'absent'}`);
