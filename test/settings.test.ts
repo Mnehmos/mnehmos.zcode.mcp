@@ -6,14 +6,19 @@
  * integration.test.ts, because only a real runtime can demonstrate it.
  */
 import { describe, expect, it } from '@jest/globals';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   apiKeyEnvCandidates,
   bootstrapProvider,
   buildChildEnv,
   isCredentialEnvVar,
+  isRegistryKey,
   configHasModel,
   hasAmbientKey,
+  keyFromProviderRegistry,
   resolveApiKey,
   splitModelRef,
   targetFromEnv,
@@ -246,5 +251,154 @@ describe('targetFromEnv', () => {
   });
   it('returns undefined when unset', () => {
     expect(targetFromEnv({} as NodeJS.ProcessEnv)).toBeUndefined();
+  });
+});
+
+/**
+ * The registry fallback: a user configures their model in ZCode's model menu, and the MCP finds the
+ * key there instead of asking for a second copy. ZCode's own UI is the only place setup should need.
+ *
+ * Every case uses a synthetic home, so no test reads the real `~/.zcode/v2/config.json` and a
+ * developer's own credentials can never influence a result.
+ */
+describe('keyFromProviderRegistry', () => {
+  /** A registry shaped like ZCode's. Ids are UUIDs, which is why matching cannot use the name. */
+  const deepseek = {
+    name: 'DeepSeek - API Key',
+    kind: 'anthropic',
+    options: { apiKey: 'sk-synthetic-deepseek', baseURL: 'https://api.deepseek.com/anthropic' },
+    models: { 'deepseek-v4.1-flash-expires-on-0910': { limit: { context: 128_000 } } },
+  };
+  const UUID = 'f4f09303-fbfc-4895-8258-ccb32ef2149f';
+
+  function home(providers: Record<string, unknown>): string {
+    const h = mkdtempSync(join(tmpdir(), 'zcode-registry-'));
+    const dir = join(h, '.zcode', 'v2');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'config.json'), JSON.stringify({ provider: providers }), 'utf8');
+    return h;
+  }
+
+  it('finds the key by the endpoint the runtime is about to call', () => {
+    const k = keyFromProviderRegistry({ baseURL: 'https://api.deepseek.com/anthropic' }, home({ [UUID]: deepseek }));
+    expect(k?.value).toBe('sk-synthetic-deepseek');
+  });
+
+  it('tolerates a trailing slash on either side of the URL', () => {
+    const k = keyFromProviderRegistry({ baseURL: 'https://api.deepseek.com/anthropic/' }, home({ [UUID]: deepseek }));
+    expect(k?.value).toBe('sk-synthetic-deepseek');
+  });
+
+  it('falls back to the model list when no URL is supplied', () => {
+    const k = keyFromProviderRegistry({ model: 'deepseek-v4.1-flash-expires-on-0910' }, home({ [UUID]: deepseek }));
+    expect(k?.value).toBe('sk-synthetic-deepseek');
+  });
+
+  it('prefers the endpoint match over the model match', () => {
+    const other = { ...deepseek, options: { apiKey: 'sk-other', baseURL: 'https://elsewhere.invalid' } };
+    const providers = { a: { ...deepseek, options: { apiKey: 'sk-by-model', baseURL: 'https://x.invalid' } }, b: other };
+    // Only `a` lists the model; only `b` matches the URL. The URL wins.
+    const k = keyFromProviderRegistry(
+      { baseURL: 'https://elsewhere.invalid', model: 'deepseek-v4.1-flash-expires-on-0910' },
+      home(providers),
+    );
+    expect(k?.value).toBe('sk-other');
+  });
+
+  it('names its source without containing the secret', () => {
+    const k = keyFromProviderRegistry({ baseURL: 'https://api.deepseek.com/anthropic' }, home({ [UUID]: deepseek }));
+    expect(k?.name).toContain(UUID);
+    expect(k?.name).not.toContain('sk-synthetic-deepseek');
+    expect(isRegistryKey(k)).toBe(true);
+    expect(isRegistryKey({ name: 'DEEPSEEK_API_KEY' })).toBe(false);
+  });
+
+  it('skips a provider that is disabled, or whose key is empty', () => {
+    const providers = {
+      disabled: { ...deepseek, enabled: false },
+      nokey: { ...deepseek, options: { baseURL: 'https://api.deepseek.com/anthropic' } },
+      blank: { ...deepseek, options: { apiKey: '   ', baseURL: 'https://api.deepseek.com/anthropic' } },
+    };
+    expect(keyFromProviderRegistry({ baseURL: 'https://api.deepseek.com/anthropic' }, home(providers))).toBeNull();
+  });
+
+  it('never opens credentials.json — a key that lives only there is not found', () => {
+    // Constitution Article IV. That file has a machine-derivable cipher; it stays shut even though
+    // reading it is technically possible, so this is a boundary worth proving mechanically.
+    const h = mkdtempSync(join(tmpdir(), 'zcode-registry-'));
+    const dir = join(h, '.zcode', 'v2');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'credentials.json'), JSON.stringify({ deepseek: 'sk-only-in-credentials' }), 'utf8');
+    expect(keyFromProviderRegistry({ baseURL: 'https://api.deepseek.com/anthropic' }, h)).toBeNull();
+  });
+
+  it('returns null for a missing or malformed registry rather than throwing', () => {
+    expect(keyFromProviderRegistry({ baseURL: 'https://api.deepseek.com/anthropic' }, tmpdir())).toBeNull();
+    const h = mkdtempSync(join(tmpdir(), 'zcode-registry-'));
+    mkdirSync(join(h, '.zcode', 'v2'), { recursive: true });
+    writeFileSync(join(h, '.zcode', 'v2', 'config.json'), '{ not json', 'utf8');
+    expect(keyFromProviderRegistry({ baseURL: 'https://api.deepseek.com/anthropic' }, h)).toBeNull();
+  });
+
+  it('matches when the registry stores a SHORTER base URL than the runtime uses', () => {
+    // The real shape that broke the first attempt: registry has https://api.deepseek.com, the
+    // runtime is configured with https://api.deepseek.com/anthropic. Equality finds neither.
+    const prov = { ...deepseek, options: { apiKey: 'sk-shorter', baseURL: 'https://api.deepseek.com' } };
+    const k = keyFromProviderRegistry({ baseURL: 'https://api.deepseek.com/anthropic' }, home({ [UUID]: prov }));
+    expect(k?.value).toBe('sk-shorter');
+  });
+
+  it('matches when the registry stores a LONGER base URL than the runtime uses', () => {
+    const prov = { ...deepseek, options: { apiKey: 'sk-longer', baseURL: 'https://api.deepseek.com/anthropic/v1' } };
+    const k = keyFromProviderRegistry({ baseURL: 'https://api.deepseek.com' }, home({ [UUID]: prov }));
+    expect(k?.value).toBe('sk-longer');
+  });
+
+  it('does not treat a shared host as the same provider', () => {
+    // A path prefix must land on a / boundary: .../api must not match .../api2.
+    const prov = { ...deepseek, options: { apiKey: 'sk-other', baseURL: 'https://api.deepseek.com.attacker' } };
+    expect(keyFromProviderRegistry({ baseURL: 'https://api.deepseek.com/anthropic' }, home({ [UUID]: prov }))).toBeNull();
+  });
+
+  it('prefers an exact endpoint over a prefix, even when the prefix lists the model', () => {
+    const providers = {
+      prefix: { ...deepseek, options: { apiKey: 'sk-prefix', baseURL: 'https://api.deepseek.com' } },
+      exact: {
+        options: { apiKey: 'sk-exact', baseURL: 'https://api.deepseek.com/anthropic' },
+        models: {}, // lists nothing at all
+      },
+    };
+    const k = keyFromProviderRegistry(
+      { baseURL: 'https://api.deepseek.com/anthropic', model: 'deepseek-v4.1-flash-expires-on-0910' },
+      home(providers),
+    );
+    expect(k?.value).toBe('sk-exact');
+  });
+
+  it('still finds a provider whose endpoint it cannot relate to ours, via the model list', () => {
+    const prov = { ...deepseek, options: { apiKey: 'sk-by-model', baseURL: 'https://proxy.internal/v1' } };
+    const k = keyFromProviderRegistry(
+      { baseURL: 'https://api.deepseek.com/anthropic', model: 'deepseek-v4.1-flash-expires-on-0910' },
+      home({ [UUID]: prov }),
+    );
+    expect(k?.value).toBe('sk-by-model');
+  });
+
+  it('matches nothing without a hint, so it cannot spend an arbitrary provider', () => {
+    expect(keyFromProviderRegistry({}, home({ [UUID]: deepseek }))).toBeNull();
+  });
+});
+
+describe('resolveApiKey — environment wins, registry is the fallback', () => {
+  it('uses the environment when it has a key, without consulting the registry', () => {
+    const found = resolveApiKey('deepseek', { DEEPSEEK_API_KEY: 'from-env' } as NodeJS.ProcessEnv, {
+      baseURL: 'https://api.deepseek.com/anthropic',
+    });
+    expect(found).toEqual({ name: 'DEEPSEEK_API_KEY', value: 'from-env' });
+    expect(isRegistryKey(found)).toBe(false);
+  });
+
+  it('still returns null when neither source has one', () => {
+    expect(resolveApiKey('deepseek', {} as NodeJS.ProcessEnv, { baseURL: 'https://nothing.invalid' })).toBeNull();
   });
 });

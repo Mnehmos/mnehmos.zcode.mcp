@@ -1205,3 +1205,61 @@ Also note: the live key was sitting in ZCode's provider config the whole time. S
 that "ZCode's model management should be enough" was substantively right about where to find a
 credential — the config just cannot hand it to a spawned runtime (A25), so it has to be read and
 placed in that runtime's environment by us.
+
+## A27. The server now reads ZCode's provider registry — and the false read-back that nearly hid two bugs
+
+**CONFIRMED.** Fixes what A25 diagnosed but left as a user-facing wart.
+
+### What changed
+
+A25 established that a spawned runtime reads no config, so a user who configured their model in
+ZCode — the one place they should have to — had to paste the key a second time where this server
+could see it. `resolveApiKey` now falls back to `~/.zcode/v2/config.json` and copies the matching
+provider's key into the child environment. The environment still wins when set; the fallback only
+fills a gap.
+
+Setup is now: **configure your model in ZCode.** Nothing else.
+
+Guardrails, all tested: read-only; only `options.apiKey` of the matching provider; `credentials.json`
+is never opened (Article IV, and there is a test asserting a key that lives only there is NOT found);
+the value never enters a log, envelope, warning or tool result. A borrowed key is reported as
+`provider_key_from_registry` (advisory) naming the provider, so it is never secret *which* credential
+is being spent.
+
+### The false read-back
+
+The first version looked like it worked. `zcode_models current` answered:
+
+```
+"model": { "modelId": "deepseek-v4.1-flash-expires-on-0910", "providerId": "deepseek" }
+```
+
+with no credential in the environment. The temptation is to call that proof. It is not: that value is
+`ZCODE_MODEL`, which we had just set — the runtime echoes the model it was told to use whether or not
+it has any way to call it. **A read-back that echoes the input is not a read-back.** The real turn
+failed immediately:
+
+```
+provider_not_configured: "Model provider is missing an API key: deepseek"
+```
+
+Only an operation that would fail without the credential can confirm the credential. `.re/mcp_call.mjs`
+drives the real server over stdio for exactly this reason.
+
+### Two matching bugs the turn then exposed
+
+Provider ids are UUIDs or `builtin:*`, so the `deepseek` in `deepseek/…` matches nothing. Matching is
+by endpoint and by model list, and both naive forms silently find nothing:
+
+| signal | naive form | why it fails |
+|---|---|---|
+| endpoint | string equality | registry stores `https://api.deepseek.com`; the runtime is configured with `https://api.deepseek.com/anthropic`. Same provider, one path segment apart |
+| model | the raw ref | registry lists `deepseek-v4.1-flash-expires-on-0910`; the ref is `deepseek/deepseek-v4.1-flash-expires-on-0910` |
+
+Now: URLs are compared for a *boundary* prefix relationship in either direction (exact scores higher
+than prefix), the model is compared **un-split**, and the endpoint dominates the score — a key has to
+belong to the endpoint we are about to call, whereas a provider may serve a model it does not
+advertise. `.../api` deliberately does not match `.../api2`, and there is a test for that.
+
+End state, verified by a real turn with no credential in the environment and none in the
+registration: `outcome: completed`, `text: "MODEL_MENU_ONLY"`.
