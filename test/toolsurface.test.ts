@@ -50,9 +50,31 @@ describe('tools/list', () => {
     expect(branches(chat)?.length).toBeGreaterThan(1);
   });
 
-  it('publishes all 15 tools, each with a distinct name and a real description', () => {
-    expect(listing.tools).toHaveLength(15);
-    expect(new Set(TOOL_NAMES).size).toBe(15);
+  it('publishes exactly the tools that have a dispatcher', () => {
+    // Membership is deliberate, and this list is the contract. `zcode_command` was advertised in
+    // tools/list with no dispatcher anywhere, so every call to it returned `unknown tool` — an
+    // advertised tool that cannot work is worse than an absent one, and it is withheld until it has
+    // a dispatcher, a contract and tests. Adding a name here means wiring it in src/index.ts.
+    expect(TOOL_NAMES).toEqual([
+      'zcode_status',
+      'zcode_session',
+      'zcode_chat',
+      'zcode_conversation',
+      'zcode_files',
+      'zcode_settings',
+      'zcode_plugins',
+      'zcode_mcp',
+      'zcode_automation',
+      'zcode_usage',
+      'zcode_models',
+      'zcode_approval',
+      'zcode_headless',
+      'zcode_protocol',
+    ]);
+  });
+
+  it('every tool carries a distinct name and a real description', () => {
+    expect(new Set(TOOL_NAMES).size).toBe(TOOL_NAMES.length);
     for (const t of listing.tools) {
       // A stub description would be a tool the calling model cannot use correctly (FR-045).
       expect((t.description ?? '').length).toBeGreaterThan(30);

@@ -98,7 +98,7 @@ provider rejects requests above roughly 89–94 registered tools.
 | `zcode_conversation` | `rows`, `messages`, `events`, `plans`, `usage` | ✅ | works |
 | `zcode_plugins` | `list`, `overview`, `describe`, `validate`, `set_enabled`, `configure`, `reset_config`, `install`, `update`, `uninstall`, `marketplace`, `cancel_operation` | mixed | works |
 | `zcode_mcp` | `list`, `status`, `servers`, `add_server`, `remove_server` | mixed | works |
-| `zcode_settings` | `read_state`, `get`, `set_desktop`, `set_default_*`, `update_*_prefs`, provider actions, `hook_trust_grant` | mixed | works |
+| `zcode_settings` | `read_state`, `get`, `set_desktop`, `set_default_*`, `update_*_prefs`, `upsert_provider`/`remove_provider`/`update_provider_registry`, `hook_trust_grant` | mixed | works; `upsert_provider` is what widens a runtime's model list |
 | `zcode_protocol` | `methods`, `call` | mixed | works, gated |
 | `zcode_headless` | `prompt` | ❌ | works |
 | `zcode_automation` | `list`, `create`, `update`, `delete`, `check_binding` | mixed | **declared limitation** |
@@ -191,6 +191,18 @@ un-analysed `hooks trust` family). The two that mattered most resolved decisivel
   `credentials.json` is AES-256-GCM but with a key **derived from the machine's own identity** when
   `ZCODE_CREDENTIAL_SECRET` is unset, so it is obfuscated rather than truly encrypted.
 
+### Open in this server
+
+- **`zcode_models select scope=server` does not warn** that a workspace which already remembers a
+  model keeps it. A switch can therefore look applied and have no effect on the next turn.
+- **`zcode_command` is withheld.** Its schema is designed and its protocol methods exist, but no
+  dispatcher was written, so calling it returned `unknown tool` while it was still advertised. An
+  advertised tool that cannot work is worse than an absent one, so it is not published until it has a
+  dispatcher, a contract and tests.
+- **The tool budget needs re-measuring.** The recorded 87 was taken while these 15 tools were being
+  rejected by the client, so it is roughly 15 too low (14 published tools plus one withheld). The 89-94 ceiling is a GLM limitation and does
+  not apply to other providers.
+
 ## Giving it a model
 
 **Configure your provider in ZCode — that is the whole setup.** The model menu writes
@@ -207,6 +219,23 @@ Resolution order, and the environment always wins:
 A key that came from the registry is reported as `provider_key_from_registry` (advisory) naming the
 provider, so which credential is being spent is never a mystery. Point the server at a model and
 endpoint with `ZCODE_MCP_MODEL` and `ZCODE_MCP_BASE_URL`.
+
+### Switching models
+
+A runtime spawned from the environment knows exactly **one** model, so its catalogue has one entry and
+there is nothing to switch to. `zcode_settings upsert_provider` widens that catalogue on a **running**
+runtime, gated behind `ZCODE_MCP_ALLOW_PROVIDER_EDIT=1`; `zcode_models select` then switches:
+
+| scope | mechanism | can introduce a *new* model |
+|---|---|---|
+| `server` | this process's default, for runtimes spawned afterwards | yes |
+| `workspace` | `workspace/setDefaultModel` | only from the runtime's catalogue |
+| `session` | `session/setModel` | only from the runtime's catalogue |
+
+Measured end to end: the catalogue goes 1 → 2 models, a switch selects the added one, and the turn
+that follows runs on it. One limit worth knowing: **a workspace that already remembers a model keeps
+it** — `select scope=server` applies to runtimes spawned afterwards in a workspace with no stronger
+persisted state.
 
 Two things this deliberately does **not** do: it never opens `~/.zcode/v2/credentials.json` (that
 file has a machine-derivable cipher and is off-limits by policy, not by difficulty), and it never puts

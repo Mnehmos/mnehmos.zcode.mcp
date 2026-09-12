@@ -445,13 +445,12 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
       'rewind_apply is destructive and requires confirm:true.',
     schema: FilesArgs,
   },
-  {
-    name: 'zcode_command',
-    description:
-      'Resolve and execute ZCode\'s own command surface. NOTE: v4/command returns ADMISSION, not completion — ' +
-      'use zcode_chat when you need the outcome.',
-    schema: CommandArgs,
-  },
+  // `zcode_command` is deliberately NOT published in this release. Its schema below is the designed
+  // contract, but no dispatcher was ever written, so a client that called it got
+  // `unknown tool: zcode_command` — advertised and unusable, which is the exact failure this project
+  // exists to prevent. (`query` maps to `v4/commands/query` and `execute` to `v4/command`, both
+  // already used elsewhere; `catalog` needs a data source that does not exist yet.) Publishing it
+  // again needs a dispatcher, a contract and tests, not just the entry.
   {
     name: 'zcode_settings',
     description:
