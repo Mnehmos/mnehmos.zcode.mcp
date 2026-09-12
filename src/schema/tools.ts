@@ -13,6 +13,7 @@
  * hazard the model calling us will not see (FR-045).
  */
 import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 
 // ── shared vocabulary ────────────────────────────────────────────────────────
 
@@ -491,3 +492,22 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
 
 /** Tool names only, for the budget assertion in tests. */
 export const TOOL_NAMES = TOOL_REGISTRY.map((t) => t.name);
+
+/**
+ * The JSON Schema published for a tool's arguments, as MCP requires it.
+ *
+ * MCP mandates `type: "object"` at the root, and both the SDK's `ListToolsResultSchema` and ZCode's
+ * client enforce it — the error is `Invalid input: expected "object"` at `tools[n].inputSchema.type`.
+ * `zodToJsonSchema` on a discriminated union emits a bare `anyOf` with NO root `type`, so 13 of these
+ * 15 tools were being rejected; the list handler previously cast the result to `{type:'object'}`, a
+ * type assertion that describes the shape without producing it. Two tools happened to pass only
+ * because their args are a plain `z.object`.
+ *
+ * `anyOf` beside `type: "object"` is valid JSON Schema and equivalent here, since every branch is an
+ * object — so the union is kept rather than flattened.
+ */
+export function toolInputSchema(schema: z.ZodTypeAny): { type: 'object'; [k: string]: unknown } {
+  const json = zodToJsonSchema(schema, { $refStrategy: 'none' }) as Record<string, unknown>;
+  // Supply a missing root type; never overwrite one that is present, which would misdescribe it.
+  return (json.type === undefined ? { ...json, type: 'object' } : json) as { type: 'object'; [k: string]: unknown };
+}

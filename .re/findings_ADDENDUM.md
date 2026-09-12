@@ -1263,3 +1263,71 @@ advertise. `.../api` deliberately does not match `.../api2`, and there is a test
 
 End state, verified by a real turn with no credential in the environment and none in the
 registration: `outcome: completed`, `text: "MODEL_MENU_ONLY"`.
+
+## A28. 13 of 15 tools were invalid per the MCP spec, so a client could load none of them
+
+**CONFIRMED.** Reported by ZCode's client, reproduced locally, and it was our bug — not a quirk of
+ZCode. Our own MCP SDK rejects the same payload.
+
+### The defect
+
+```
+Invalid result for tools/list:
+  tools[n].inputSchema.type — Invalid input: expected "object"      (13 entries)
+```
+
+MCP requires `inputSchema` to be an object schema with `type: "object"` at the root, and
+`@modelcontextprotocol/sdk`'s `ListToolsResultSchema` enforces it:
+
+```js
+inputSchema: z.object({
+  type: z.literal('object'),
+  properties: z.record(z.string(), AssertObjectSchema).optional(),
+  required: z.array(z.string()).optional(),
+}).catchall(z.unknown())
+```
+
+`zodToJsonSchema` renders a **discriminated union** as a bare `anyOf` with **no root `type`**, and one
+zod union per tool is exactly this codebase's design (Article III: one union per tool). So 13 of 15
+tools published `{anyOf: [...]}` and were refused. The two that passed, `zcode_usage` and
+`zcode_headless`, are plain `z.object` args — they were the only ones that were never a union.
+
+The list handler had hidden it:
+
+```ts
+inputSchema: zodToJsonSchema(t.schema, { $refStrategy: 'none' }) as { type: 'object'; [k: string]: unknown }
+```
+
+That cast *asserts* the shape without producing it. The compiler was satisfied; every client was not.
+
+### The fix
+
+`toolInputSchema()` in `src/schema/tools.ts`: supply a missing root `type`, never overwrite one that
+is present (a mislabelled schema would be worse than a missing type). `anyOf` beside `type: "object"`
+is valid JSON Schema and equivalent here, since every branch is an object, so the union — and the
+per-action validation Article III depends on — is kept rather than flattened.
+
+Verified on the wire, not just in the handler: `.re/verify_tools_list.mjs` drives the real server over
+stdio, takes the actual `tools/list` bytes and validates them with the SDK's own schema.
+
+```
+tools/list returned 15 tool(s)
+root type !== "object": none
+SDK validator: ACCEPTED
+unions preserved: 13 of 15 (the other 2 are plain objects)
+```
+
+### Why nothing caught it, and what closed the gap
+
+There was **no test of the published tool surface at all** — no `test/schema.test.ts`, contrary to
+what AGENTS.md's "adding a tool action" step said, and no assertion anywhere that the tool list was
+acceptable to a client. `test/toolsurface.test.ts` now validates the whole list with the SDK's
+`ListToolsResultSchema` (reporting offending paths, not just a boolean), asserts every tool carries a
+root `type`, checks the unions survive, and requires a real description on each.
+
+### Consequence for the tool-budget work
+
+This changes the arithmetic. Tools that a client refuses are not registered, so **any tool count
+measured while this was broken excluded our 15**. The ceiling question (GLM rejects roughly 89–94
+registered tools, addendum A22) needs re-measuring now that they actually load — the budget may be
+15 tools larger than any previous measurement, which is precisely the direction that hits it.
