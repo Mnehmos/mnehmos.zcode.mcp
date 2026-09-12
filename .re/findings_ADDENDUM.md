@@ -1363,3 +1363,64 @@ emitted anywhere; left alone, since removing a declared code is the breaking cha
 
 The conversation read of the test turn showed **79,602 input tokens** for a one-word reply — the ZCode
 agent's own system prompt and tool inventory, not anything this server adds. Each turn costs that.
+
+## A30. Switching models works — and three bugs stood between it and the first attempt
+
+**CONFIRMED by the model naming itself and by the runtime's own catalogue.**
+
+### What a switch actually is
+
+A spawned runtime gets its model from ONE environment variable (`ZCODE_MODEL`), so it offers exactly
+one model in its catalogue. `zcode_models select` therefore has three scopes and only one of them can
+introduce a model the runtime does not already have:
+
+| scope | mechanism | can introduce a NEW model |
+|---|---|---|
+| `server` | sets this process's default for runtimes spawned from then on | ✅ the only one |
+| `workspace` | `workspace/setDefaultModel` | ❌ must already be in the catalogue |
+| `session` | `session/setModel` | ❌ must already be in the catalogue |
+
+Measured with `.re/probe_catalogue.mjs` — same process, before and after a `server` switch:
+
+```
+BEFORE  fresh workspace -> current={deepseek-v4.1-flash-expires-on-0910}  available=1 [that model]
+select scope=server -> deepseek/deepseek-v4-pro
+AFTER   fresh workspace -> current={deepseek-v4-pro}                      available=1 [deepseek-v4-pro]
+```
+
+And independently, spawning the runtime by hand with `ZCODE_MODEL=deepseek/deepseek-v4-pro` and asking
+it to identify itself:
+
+```
+ZCODE_MODEL = deepseek/deepseek-v4-pro                     -> reply "deepseek/deepseek-v4-pro"
+ZCODE_MODEL = deepseek/deepseek-v4.1-flash-expires-on-0910 -> reply "deepseek/deepseek-v4.1-flash-expires-on-0910"
+```
+
+The model really runs. It is not a config value that goes unread.
+
+### The limit that made the first demonstration look broken
+
+A first demonstration switched the target and then ran a turn in a workspace that had **already been
+used**. The turn came back on the OLD model. Nothing was wrong with the plumbing: ZCode's persisted
+**workspace state outranks the environment layer**, so a workspace that already remembers a model
+keeps it, and a fresh runtime only adopts the new default if that workspace has no stronger state.
+
+That is a real constraint on the feature rather than a defect, and `select scope=server` does not warn
+about it. It should: "this changes the default for runtimes spawned from now on" is true but
+incomplete — it also has to be a workspace with no remembered model.
+
+### Three bugs found on the way
+
+1. **`session/setModel` takes a `ModelRef` object, not a string.** Passing `"deepseek/deepseek-v4-pro"`
+   is rejected with `-32602 Invalid params — model: expected object, received string`. Both call sites
+   sent a string: `zcode_models select scope:"session"` and `zcode_session set_model`. `resume` did too.
+   `modelRefObject()` now builds `{modelId, providerId}` and REFUSES a bare model id, because provider
+   ids are UUIDs and there is nothing to guess from.
+2. **`session/resume` reported a false failure.** Its read-back read `after.status`, but the response
+   nests the record under `session` (`after.session.status`), so a successful resume reported
+   `read-back mismatch: status was not observable`. A false negative is the opposite failure from the
+   one read-backs exist to catch — it teaches a caller to ignore the signal. `resolveField()` checks
+   both locations and still fails when a field is genuinely absent.
+3. **`select scope=server` resolved its credential without a hint**, so the registry fallback had
+   nothing to match on and reported `credential_var: null` with a `provider_key_missing` warning for a
+   provider whose key was configured. Now `credential_var: "zcode provider registry:f4f09303-…"`.

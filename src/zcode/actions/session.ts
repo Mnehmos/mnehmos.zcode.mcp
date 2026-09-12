@@ -13,6 +13,7 @@ import { AuditDb } from '../../storage/db.js';
 import { describe, resolveWorkspace, workspaceRequired } from './status.js';
 import type { RuntimeContext } from '../../context.js';
 import type { Runtime } from '../registry.js';
+import { modelRefObject } from '../model-catalog.js';
 
 interface SessionRecord {
   sessionId?: string;
@@ -98,10 +99,20 @@ export async function sessionDispatch(
         return await doSimple(ctx, o, runtime, 'session/setMode', { sessionId: sessionIdOf(args), mode: String(args.mode) }, runId, (after) =>
           readBackField(o, after, 'mode', String(args.mode)),
         );
-      case 'set_model':
-        return await doSimple(ctx, o, runtime, 'session/setModel', { sessionId: sessionIdOf(args), model: String(args.model) }, runId, (after) =>
-          readBackModel(o, after, String(args.model)),
+      case 'set_model': {
+        // `session/setModel` takes a ModelRef OBJECT; a string is rejected with
+        // `-32602 Invalid params — model: expected object, received string`. The provider is
+        // required because provider ids are UUIDs, so a bare model id is ambiguous.
+        const wanted = String(args.model);
+        const refObject = modelRefObject(wanted);
+        if (!refObject) {
+          o.fail(`set_model needs "<provider>/<model>", got "${wanted}" — the protocol requires a providerId`);
+          return finish(ctx, o, runId);
+        }
+        return await doSimple(ctx, o, runtime, 'session/setModel', { sessionId: sessionIdOf(args), model: refObject }, runId, (after) =>
+          readBackModel(o, after, wanted),
         );
+      }
       case 'set_thought_level':
         return await doSimple(
           ctx,
@@ -112,7 +123,10 @@ export async function sessionDispatch(
           runId,
           (after) => readBackField(o, after, 'thoughtLevel', String(args.thought_level)),
         );
-      case 'resume':
+      case 'resume': {
+        // Same object shape as set_model. A bare model id cannot be resolved, so it is dropped
+        // rather than guessed — resume with no model keeps whatever the session already had.
+        const resumeModel = typeof args.model === 'string' ? modelRefObject(args.model) : null;
         return await doSimple(
           ctx,
           o,
@@ -121,12 +135,13 @@ export async function sessionDispatch(
           {
             sessionId: sessionIdOf(args),
             workspace: workspaceRef(runtime),
-            ...(typeof args.model === 'string' ? { model: args.model } : {}),
+            ...(resumeModel ? { model: resumeModel } : {}),
             ...(typeof args.thought_level === 'string' ? { thoughtLevel: args.thought_level } : {}),
           },
           runId,
           (after) => readBackField(o, after, 'status', undefined, (v) => typeof v === 'string'),
         );
+      }
       case 'goal':
         return await doGoal(ctx, o, runtime, args, runId);
       case 'subagents':
@@ -450,27 +465,51 @@ async function doSimple(
   return finish(ctx, o, runId);
 }
 
+/**
+ * Where a field lives in a mutation's response.
+ *
+ * Some methods return the session record directly (`after.mode`); others wrap it (`after.session.mode`)
+ * — `session/resume` returns a rich object with the record under `session`. Reading only the top
+ * level made a SUCCESSFUL resume report `read-back mismatch: status was not observable`, which is the
+ * opposite failure from the one read-backs exist to catch: a false negative teaches a caller to
+ * ignore the signal. Both locations are checked, and a field that is genuinely absent still fails.
+ */
+function resolveField(after: SessionRecord | undefined, path: string): unknown {
+  const walk = (from: unknown): unknown => {
+    if (!path.includes('.')) return (from as Record<string, unknown> | undefined)?.[path];
+    let cur: unknown = from;
+    for (const part of path.split('.')) {
+      cur = (cur as Record<string, unknown> | undefined)?.[part];
+      if (cur === undefined) return undefined;
+    }
+    return cur;
+  };
+  const direct = walk(after);
+  if (direct !== undefined) return direct;
+  return walk((after as Record<string, unknown> | undefined)?.session);
+}
+
 /** Compare one field after a mutation. `expected === undefined` means "any value of the right type". */
 function readBackField(
   o: Outcome,
   after: SessionRecord,
-  field: keyof SessionRecord,
+  field: string,
   expected: string | undefined,
   predicate?: (v: unknown) => boolean,
 ): void {
-  const observed = after?.[field];
+  const observed = resolveField(after, field);
   if (expected === undefined) {
     const ok = predicate ? predicate(observed) : observed !== undefined;
-    o.readBack(ok, ok ? undefined : `${String(field)} was not observable after the change`);
+    o.readBack(ok, ok ? undefined : `${field} was not observable after the change`);
     return;
   }
   const ok = observed === expected;
-  o.readBack(ok, ok ? undefined : `requested ${String(field)}=${expected}, observed ${JSON.stringify(observed)}`);
+  o.readBack(ok, ok ? undefined : `requested ${field}=${expected}, observed ${JSON.stringify(observed)}`);
 }
 
 /** Model is nested in some responses, so compare its stringified form. */
 function readBackModel(o: Outcome, after: SessionRecord, requested: string): void {
-  const seen = JSON.stringify(after?.model ?? null);
+  const seen = JSON.stringify(resolveField(after, 'model') ?? null);
   const ok = seen.includes(requested);
   o.readBack(ok, ok ? undefined : `requested model ${requested}, observed ${seen.slice(0, 200)}`);
 }
