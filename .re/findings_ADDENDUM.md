@@ -1075,3 +1075,80 @@ agent env.
 *process* would resolve has been shown to authenticate. Identify a credential by source, not by name,
 and fingerprint each source separately — a combined `env ?? file` check reports only on the winner.
 `.re/probe_keys.mjs` does this and prints no values.
+
+## A25. ZCode's model management does NOT provision a runtime this MCP spawns — it is still env-only
+
+**CONFIRMED by measurement on 2026-09-12, with 8 providers configured in ZCode's own config.**
+
+The natural assumption — "ZCode already manages models and providers, so this server does not need
+its own credentials" — is false, and acting on it removes the only working provider bootstrap. Worth
+re-deriving rather than trusting A19, because the condition A19 was measured under (a config with no
+providers in it) is no longer the condition we are in.
+
+### The measurement
+
+`.re/probe_model_env.mjs` spawns the runtime twice, identically except for the environment. The
+runtime keeps `USERPROFILE`/`APPDATA`, so `~/.zcode/v2/config.json` — which at test time held **8
+providers including a live DeepSeek key** — stays fully readable. The question is not whether that
+config is *reachable*, but whether it is *enough*.
+
+```
+A  no provider env
+     settings.model.current   {"modelId":"missing-model","providerId":"zcode-unconfigured"}
+     settings.model.available 0
+     modelCatalog.providers   0
+
+B  + ZCODE_MODEL / ZCODE_BASE_URL / ZCODE_API_KEY
+     settings.model.current   {"modelId":"deepseek-v4.1-flash-expires-on-0910","providerId":"deepseek"}
+     settings.model.available 1
+     modelCatalog.providers   1
+```
+
+A runtime with ZCode's provider config on disk and nothing in its environment reports an **empty
+catalogue**. The config layer that ZCode's own sessions read is not a layer a spawned `app-server`
+consults for credentials.
+
+### ZCode does not export its provider config to MCP children either
+
+The tempting second reading — "then ZCode at least hands its keys to the MCP servers it launches" —
+is also false. Evidence:
+
+| observation | implication |
+|---|---|
+| `HKCU\Environment` holds no provider key at all (only `GEMINI_API_KEY=your_api_key_here`) | nothing is persisted at the OS level for a child to inherit |
+| this server's env DID contain `OPENROUTER_API_KEY`, value `sha256:1723c4f6` | ZCode passes its **own inherited environment** down to children |
+| that value matches **nothing** in ZCode's config, whose OpenRouter key is `sha256:88da80fd` | the app is not exporting what you configured in its UI — it is forwarding a stale variable it was itself launched with |
+| `DEEPSEEK_API_KEY` and `ZAI_API_KEY` are in ZCode's config but **absent** from this server's env | keys you add in model management do not appear in children |
+
+So the direction of flow is: ZCode's environment → child MCP servers. Never: ZCode's provider
+registry → children.
+
+### What IS handled by ZCode / this MCP
+
+Model **selection**, not credential provisioning. `ZCODE_MCP_MODEL` + `ZCODE_MCP_BASE_URL` sit in the
+registration and are read by `parseEnvConfig`; `zcode_models selection:set` pushes a choice to the
+runtime via `workspace/setDefaultModel`. Credentials remain the caller's to supply.
+
+### Credential inventory at the time of writing
+
+Fingerprints only; `.re/where_are_the_keys.mjs` produces this table without printing a value.
+
+| credential | ZCode's provider config | verdict |
+|---|---|---|
+| `OPENROUTER_API_KEY` (`.env`) | **identical** — `sha256:88da80fd` | true duplicate |
+| `DEEPSEEK_API_KEY` (`.env`) | **different** — `.env` `sha256:4fe44415` vs ZCode `sha256:d533861f` | only local copy is `.env` |
+| `ZAI_API_KEY` (`.env`) | absent (ZCode holds two unrelated `builtin:zai-*` keys) | only local copy is `.env` |
+| `ZCODE_MCP_MODEL` / `_BASE_URL` / `_WORKSPACE` | n/a | already duplicated in the registration |
+
+**Consequence:** deleting `.env` today removes the only working bootstrap for a spawned runtime *and*
+the only local copy of two credentials. It is the right end state only once a provider key reaches the
+environment ZCode hands this server — one variable (`DEEPSEEK_API_KEY` or `ZCODE_API_KEY`), which is
+the single channel that works.
+
+### A24.3 and A25 are the same failure wearing different clothes
+
+A24.3 was "the key was rotated in `.env` but the process resolved a different source". This is "the
+key was configured in ZCode but the spawned runtime reads no config at all". Both reduce to: **identify
+a credential by the source a given process actually resolves, and prove it authenticates from there.**
+A credential that is present, correct, and configured somewhere that never reaches the consumer is
+indistinguishable from a missing one — except that it looks done.
