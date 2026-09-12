@@ -1331,3 +1331,35 @@ This changes the arithmetic. Tools that a client refuses are not registered, so 
 measured while this was broken excluded our 15**. The ceiling question (GLM rejects roughly 89–94
 registered tools, addendum A22) needs re-measuring now that they actually load — the budget may be
 15 tools larger than any previous measurement, which is precisely the direction that hits it.
+
+## A29. `zcode_plugins overview` returned 227 KB, and two warning codes were undeclared
+
+**CONFIRMED on a real call through ZCode**, found by testing the tool surface rather than reading it.
+
+### The payload
+
+`plugins/overview` returns both marketplaces in full — every plugin with English and Chinese
+descriptions, icons and homepages. Measured: **227,208 bytes**, which the caller's transport truncated
+at 50 KB. A result that size does not inform a caller, it evicts their context, and the marketplace
+catalogue is not what they asked about.
+
+`summarisePluginOverview()` now bounds it: marketplaces keep their counts, installed plugins are kept
+in full (that is what a caller is asking about), and the catalogue is replaced by its size. Same call
+after the fix: **2,605 bytes**, an 87× reduction.
+
+Nothing is dropped silently — the caller gets `payload_summarised[degraded]` naming the byte count,
+the plugin count, and the action that returns the workspace's own plugins. A silent truncation would
+be the same class of lie as a success that did not happen.
+
+### Two undeclared warning codes
+
+`provider_key_from_registry` (A27) and `payload_summarised` were both emitted without being added to
+`WARNING_CODES`. `Outcome.warn` takes `code: string`, so nothing rejected them — the vocabulary is
+declarative, not enforced, and two codes had quietly drifted out of the contract that
+`src/warnings.ts` says is stable. Both are now declared. (`payload_too_large` is declared and never
+emitted anywhere; left alone, since removing a declared code is the breaking change.)
+
+### Worth knowing for cost
+
+The conversation read of the test turn showed **79,602 input tokens** for a one-word reply — the ZCode
+agent's own system prompt and tool inventory, not anything this server adds. Each turn costs that.

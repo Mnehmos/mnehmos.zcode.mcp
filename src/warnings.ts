@@ -27,6 +27,7 @@ export const WARNING_CODES = {
   provider_key_missing: 'degraded',
   provider_config_invalid: 'unreliable',
   provider_config_disabled: 'degraded',
+  provider_key_from_registry: 'advisory',
   zc_base_url_dual_purpose: 'advisory',
   restart_required: 'advisory',
   file_absent: 'advisory',
@@ -46,6 +47,7 @@ export const WARNING_CODES = {
   raw_protocol: 'unreliable',
   frame_limit: 'advisory',
   payload_too_large: 'degraded',
+  payload_summarised: 'degraded',
 
   // ── operational hazards ──────────────────────────────────────────────────
   processes_started: 'advisory',
