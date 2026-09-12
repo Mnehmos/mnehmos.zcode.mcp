@@ -229,7 +229,7 @@ Client registration (example):
 }
 ```
 
-> **Tool budget**: if you register this server *inside ZCode itself*, its 14 tools count against the
+> **Tool budget**: if you register this server *inside ZCode itself*, its 14 published tools count against the
 > model's accepted budget (GLM rejects above ~89–94 registered tools with `[1210] Invalid API
 > parameter`). Register it in a different client, or keep the plugin profile trimmed.
 

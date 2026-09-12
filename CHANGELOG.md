@@ -2,6 +2,99 @@
 
 All notable changes to this project. Format follows Keep a Changelog.
 
+## [0.4.0] - 2026-09-12
+
+**Every tool now loads, and models can be switched live.** The headline is a defect that made the
+whole server unusable to a client: 13 of 15 tools published an `inputSchema` with no root `type`, and
+a conforming MCP client rejects the entire tool list when it sees that. Our own SDK's validator
+rejects it too — this was never a quirk of one client.
+
+The second theme is that a model switch and a provider key both now work without the ceremony they
+needed before.
+
+### Fixed — the tool list was rejected outright
+
+- **13 of the 15 declared tools carried no root `type: "object"` in `inputSchema`.** `zodToJsonSchema` renders a
+  discriminated union as a bare `anyOf`, and one union per tool is this codebase's design, so only
+  the two tools with plain `z.object` args survived. The list handler had hidden it behind an
+  `as { type: 'object' }` cast — a type assertion that describes a shape without producing it. A
+  client that refuses malformed tools registers **none** of them.
+- **`session/setModel` takes a `ModelRef` object, not a string.** Three call sites sent
+  `"provider/model"` and were rejected with `-32602 expected object, received string`, so
+  session-scoped model selection could never have worked.
+- **`session/resume` reported failure on success.** Its read-back read `after.status` while the
+  response nests the record under `session`, so a successful resume always concluded "status was not
+  observable". A false negative teaches a caller to ignore the signal.
+- **`upsert_provider` could not succeed for any input.** Its shape was invented: it required
+  `{provider, model}` where the runtime requires `{providerId, kind, models: [{modelId}]}` and is
+  strict, so the keys we sent were a hard rejection. Its read-back also watched the provider count,
+  which does not move, and declared itself unverifiable.
+- **`zcode_plugins overview` returned 227 KB** — both marketplaces in full, with i18n descriptions and
+  icons. Now bounded to ~2.6 KB with the installed plugins kept and a `payload_summarised` warning
+  naming what was withheld.
+- **Two Windows-unaddressable backup names.** A stamp built as `iso.replace(/[-:T]/g,'').slice(0,15)`
+  ends in the millisecond dot; NTFS accepts such a name and every Win32 path API strips it, so the
+  backup is created once and can never be opened. Both generators are gone; `takeBackup()` now
+  verifies the copy is byte-identical before the caller may write.
+- **`select scope=server` reported a missing key for a provider whose key was configured**, because it
+  resolved the credential without the hint the registry fallback needs.
+- Two warning codes (`provider_key_from_registry`, `payload_summarised`) were emitted without being
+  declared in the vocabulary the code calls stable.
+
+### Added
+
+- **Provider credentials come from ZCode's own provider registry** when the environment supplies
+  none. A spawned runtime reads no config at all, so the key has to be placed in its environment —
+  the server now reads `~/.zcode/v2/config.json` itself and copies the matching provider's key across.
+  Setup is therefore: **configure your model in ZCode.** Environment variables still win when set.
+  `credentials.json` is never opened, and a borrowed key is reported as
+  `provider_key_from_registry` naming the provider, so which credential is being spent is never a
+  mystery.
+- **Live model switching.** `zcode_settings upsert_provider` widens a running runtime's model
+  catalogue and `zcode_models select` switches between them — no respawn, no restart. Verified: the
+  catalogue went from one model to two, and a real turn ran on the model that had just been added,
+  with the model identifying itself.
+- `src/zcode/backup.ts` — one place that takes a restorable backup, with the byte-identical read-back.
+- Five `.re/` scripts for measurement rather than inference: `verify_tools_list.mjs`,
+  `probe_model_env.mjs`, `probe_catalogue.mjs`, `demo_live_switch.mjs`, `purge_dotfile.py`.
+
+### Changed
+
+- `ProviderBlock` now matches the runtime's own schema, read from the bundle rather than assumed.
+- `describe()` moved to a leaf module so importing a file utility no longer pulls in `node:sqlite`.
+- The dead `npm run methods` script is removed; its target file has not existed for some time.
+
+### Verified
+
+- 231 tests, including the opt-in integration suite against a real runtime; `--self-test` OK; the
+  secret scan clean.
+- A real turn **through ZCode's own client**: `outcome: completed`, `text: "END_TO_END_OK"`.
+- The real server's `tools/list` accepted by the MCP SDK's `ListToolsResultSchema`, on the wire.
+- **Every published tool reaches a dispatcher** — `.re/verify_dispatch_coverage.mjs` calls all 14
+  with empty arguments: each is refused by its own schema, which proves the call arrived. This is
+  the check that would have caught `zcode_command` advertising itself with nothing behind it.
+- A live switch with the model naming itself: `text: "deepseek-v4-pro"`.
+
+### Withheld from this release
+
+- **`zcode_command` is not published.** Its zod contract and its protocol methods exist
+  (`v4/commands/query`, `v4/command`), but no dispatcher was ever written: calling it returned
+  `unknown tool: zcode_command` while the tool was advertised in `tools/list`. Since this release is
+  the first in which any tool is callable at all, shipping the one that cannot be called would
+  undercut the whole point. It returns to the surface when it has a dispatcher, a contract and tests.
+
+### Still unproven, or limited
+
+- `zcode_automation` and `zcode_files changes`/`rewind_preview` remain host-tier gaps (`automation/*`
+  answers `-32601`; `v4/conversation/fileChanges` needs an unobtainable `baseRevision`).
+- **A workspace that already remembers a model keeps it.** `select scope=server` changes the default
+  for runtimes spawned afterwards, which is only effective in a workspace with no stronger persisted
+  state. The action does not yet say so.
+- **The tool budget was measured while these 15 tools were being rejected**, so the recorded 87 is
+  about 15 too low. Re-measure before trimming anything; the ceiling is a GLM limit and applies only
+  to GLM models.
+- The provider-edit actions remain gated behind `ZCODE_MCP_ALLOW_PROVIDER_EDIT=1`, off by default.
+
 ## [0.3.0] - 2026-09-11
 
 **All 15 tools implemented.** A probe matrix that calls every tool through the MCP protocol returns

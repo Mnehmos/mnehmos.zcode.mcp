@@ -108,6 +108,20 @@ specs/001-zcode-control/         spec → plan → research → data-model → c
   `providerId: "deepseek"` while the provider had **no key** — it was returning `ZCODE_MODEL`, which
   we had just set. Only the real turn failed. When a value can come from the thing you just
   configured, the only honest check is the operation that would fail without it.
+- **A tool shape you invented is not the protocol's shape.** Four actions were broken this way and each
+  could never have succeeded for *any* input: `session/setModel` sent a string where the runtime wants
+  a `ModelRef` object; `upsert_provider` sent `{provider, model}` where the runtime requires
+  `{providerId, kind, models:[{modelId}]}` and is strict; and two read-backs watched fields that do not
+  move (`after.status` on a response that nests the record under `session`; the provider count for an
+  action whose effect is the model list). Read the shape from the runtime before writing the zod:
+  grep `E:\zcode\resources\glm\zcode.cjs` for the method name to get its handler, then read the
+  `f.object({...})` nearby. Minified names are fine for *finding* code — never depend on them in the
+  server. The audit's `ZCODE_API_CATALOG.md` maps method → handler name.
+- **Measure with an operation that can fail, not by inspecting.** Every wrong conclusion in this
+  project's history came from inferring: that the tool list was loading, that a model switch had
+  worked, that the catalogue could not be widened. Every correction came from a probe whose failure
+  was visible. `.re/verify_tools_list.mjs`, `.re/probe_model_env.mjs`, `.re/demo_live_switch.mjs` and
+  `.re/mcp_call.mjs` exist for this; reach for them before making a claim.
 
 ## Adding a tool action
 
